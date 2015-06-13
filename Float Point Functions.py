@@ -841,7 +841,7 @@ def RemoveGrain (src, mode=11):
     elif mode == 21:
        mode = rg21
     elif mode == 22:
-       mode = rg22
+       mode = rg21
     elif mode == 23:
        mode = rg23
     elif mode == 24:
