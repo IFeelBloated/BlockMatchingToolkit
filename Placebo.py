@@ -77,17 +77,6 @@ def padding (src, left=0, top=0, right=0, bottom=0):
     clip   = core.fmtc.resample (src, w+left+right, h+top+bottom, -left, -top, w+left+right, h+top+bottom, kernel="point", fulls=True, fulld=True)
     return clip
 
-def cblurf (src):
-    core   = vs.get_core ()
-    w      = src.width
-    h      = src.height
-    blur   = core.fmtc.resample (src, w*4, h*4, kernel="cubic", a1=1, a2=0, fulls=True, fulld=True)
-    sharp  = core.fmtc.resample (src, w*4, h*4, kernel="cubic", a1=-1, a2=0, fulls=True, fulld=True)
-    dif    = core.std.MakeDiff (blur, sharp)
-    dif    = core.fmtc.resample (dif, w, h, kernel="gauss", a1=100, fulls=True, fulld=True)
-    clip   = core.std.MergeDiff (src, dif)
-    return clip
-
 def max_dif (src1, src2, ref):
     core = vs.get_core ()
     clip = core.std.Expr ([src1, src2, ref], ["x z - abs y z - abs > x y ?"])
@@ -376,7 +365,6 @@ def ediresamplef (src, w=None, h=None, sx=0, sy=0, sw=None, sh=None, kernel_u="s
 def EDInter (src, vct=1, hct=1, vfield=1, hfield=1, Y=True, U=False, V=False, nsize=0, nns=4, qual=2, etype=0, pscrn=1, honly=False):
     core = vs.get_core ()
     clip = src
-
     if hct >= 1:
        clip   = clip if honly else core.std.Transpose (clip)
        clip   = core.nnedi3.nnedi3 (clip, hfield, True, Y, U, V, nsize, nns, qual, etype, pscrn)
@@ -386,14 +374,12 @@ def EDInter (src, vct=1, hct=1, vfield=1, hfield=1, Y=True, U=False, V=False, ns
        clip   = clip if honly else core.std.Transpose (clip)
     else:
        0
-
     if vct >= 1 and honly == False:
        clip   = core.nnedi3.nnedi3(clip, vfield, True, Y, U, V, nsize, nns, qual, etype, pscrn)
        vct    = vct - 1
        vfield = 0
     else: 
        0
-
     clip = (clip if vct <= 0 and hct <= 0 else EDInter (clip, vct, hct, vfield, hfield, Y, U, V, nsize, nns, qual, etype, pscrn, honly)) if Y or U or V else src
     return clip
 
@@ -401,6 +387,15 @@ def cmsharpf (src, str=1.0):
     core  = vs.get_core ()
     w     = src.width
     h     = src.height
+    def cblurf (clp):
+        wc     = clp.width
+        hc     = clp.height
+        blur   = core.fmtc.resample (clp, wc*4, hc*4, kernel="cubic", a1=1, a2=0, fulls=True, fulld=True)
+        sharp  = core.fmtc.resample (clp, wc*4, hc*4, kernel="cubic", a1=-1, a2=0, fulls=True, fulld=True)
+        dif    = core.std.MakeDiff (blur, sharp)
+        dif    = core.fmtc.resample (dif, wc, hc, kernel="gauss", a1=100, fulls=True, fulld=True)
+        clip   = core.std.MergeDiff (clp, dif)
+        return clip
     super = ediresamplef (src, w*2, h*2, noring=True, kernel_u="spline", kernel_d="spline", taps=3, fulls=True, fulld=True)
     cblur = cblurf (super)
     cblur = cblurf (cblur)
@@ -541,6 +536,27 @@ def nlmcleansef (src, local=2.4, nlocal=0.8):
     lflt    = core.knlm.KNLMeansCL (src, d=0, a=24, s=1, h=local).knlm.KNLMeansCL (d=0, a=24, s=0, h=local)
     ldif    = core.std.MakeDiff (src, lflt).knlm.KNLMeansCL (d=0, a=2, s=4, h=local)
     clip    = core.std.MergeDiff (lflt, ldif).knlm.KNLMeansCL (d=0, a=24, s=4, h=nlocal)
+    return clip
+
+def deconvf (src):
+    core  = vs.get_core ()
+    w     = src.width
+    h     = src.height
+    def kernel (clp):
+        srp  = core.vcfreq.Restore (clp, line=0, wn=0.32, x=1, y=1, fr=25, scale=0.48)
+        srpl = gaussf (srp, 16)
+        hif  = core.std.MakeDiff (srp, srpl)
+        lowf = gaussf (clp, 16)
+        clip = core.std.MergeDiff (lowf, hif)
+        return clip
+    super = ediresamplef (src, w*2, h*2, noring=True, kernel_u="spline", kernel_d="spline", taps=3, fulls=True, fulld=True)
+    decvu = kernel (kernel (super))
+    udif  = core.std.MakeDiff (decvu, super)
+    udif  = core.fmtc.resample (udif, w, h, kernel="gauss", a1=100, fulls=True, fulld=True)
+    decvl = kernel (src)
+    ldif  = core.std.MakeDiff (decvl, src)
+    mdif  = core.std.Merge (udif, ldif, 0.36)
+    clip  = core.std.MergeDiff (src, mdif)
     return clip
 
 def Median (src):
