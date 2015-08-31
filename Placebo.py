@@ -8,7 +8,7 @@ def gauss (src, p=30):
     clip   = core.fmtc.resample (upsmp, src.width, src.height, kernel="gauss", a1=p, fulls=True, fulld=True)
     return clip
 
-def padding (src, left=0, top=0, right=0, bottom=0):
+def padding (src, left=0, right=0, top=0, bottom=0):
     core   = vs.get_core ()
     w      = src.width
     h      = src.height
@@ -80,7 +80,7 @@ def spatialnr (src, overshoot=2.4, ring=2.4, nr=1.2, rpass=1, sstring="0.0:16.0 
     clip    = core.std.CropRel (Final, 24, 24, 24, 24)
     return clip
 
-def nrfinal (spatial, dif, peldif, vmulti, login, pel=4, tr=6, thsad=4800, thscd1=248, thscd2=130, repmode=13):
+def nrfinal (spatial, dif, peldif, vmulti, login, pel=4, tr=6, thsad=4800, thscd1=10000, thscd2=255, repmode=13):
     core    = vs.get_core ()
     vmulti  = readvec (vmulti, login)
     blankd  = core.std.Expr ([dif], "0.5")
@@ -193,7 +193,7 @@ def minmulti (src, start=None, a=2, tr=6):
     clip   = min if a == tr*2+1 else minmulti (src, start=min, tr=tr, a=a)
     return clip
 
-def sharpcalmer (soft, dif, limit, peldif, pellimit, vmulti, login, pel=4, tr=6, thsadA=4800, thsadL=400, thscd1=248, thscd2=130, repmode=13, str=1.00, safelow=False):
+def sharpcalmer (soft, dif, limit, peldif, pellimit, vmulti, login, pel=4, tr=6, thsadA=4800, thsadL=400, thscd1=10000, thscd2=255, repmode=13, str=1.00, safelow=False):
     core    = vs.get_core ()
     vmulti  = readvec (vmulti, login)
     blankd  = core.std.Expr ([dif], "0.5")
@@ -222,19 +222,17 @@ def genpelclip (src, pel=4):
        clip = ediresample (src, w*4, h*4, sx=0.375, sy=0.375, noring=True, kernel_u="spline", kernel_d="spline", taps=6, fulls=True, fulld=True)
     else:
        clip = 0
-    clip    = core.fmtc.bitdepth (clip, bits=16, flt=False, fulls=True, fulld=True, dmode=1)
     return clip
 
 def getvectors (src, pelclip, tr=6, pel=4, dct=5, thsad=400):
     core        = vs.get_core ()
-    srcR        = core.fmtc.bitdepth (src, bits=16, flt=False, fulls=True, fulld=True, dmode=1)
-    supersoft   = core.mv.Super (srcR, pel=pel, chroma=False, hpad=32, vpad=32, pelclip=pelclip, sharp=2, rfilter=4, levels=0)
-    supersharp  = core.mv.Super (srcR, pel=pel, chroma=False, hpad=32, vpad=32, pelclip=pelclip, sharp=2, rfilter=2, levels=0)
+    supersoft   = core.mvsf.Super (src, pel=pel, chroma=False, hpad=32, vpad=32, pelclip=pelclip, sharp=2, rfilter=4, levels=0)
+    supersharp  = core.mvsf.Super (src, pel=pel, chroma=False, hpad=32, vpad=32, pelclip=pelclip, sharp=2, rfilter=2, levels=0)
     def search (isb, delta):
-        vectors = core.mv.Analyse (supersoft, isb=isb, overlap=16, blksize=32, search=3, chroma=False, truemotion=True, delta=delta, trymany=True, searchparam=16, pelsearch=16, dct=0, levels=0, divide=2, badrange=-24)
-        vectors = core.mv.Recalculate (supersoft, vectors, overlap=8, blksize=16, thsad=thsad//2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=2)
-        vectors = core.mv.Recalculate (supersharp, vectors, overlap=4, blksize=8, thsad=thsad//2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=2)
-        vectors = core.mv.Recalculate (supersharp, vectors, overlap=2, blksize=4, thsad=thsad//2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=0)
+        vectors = core.mvsf.Analyze (supersoft, isb=isb, overlap=16, blksize=32, search=3, chroma=False, truemotion=True, delta=delta, trymany=True, searchparam=16, pelsearch=16, dct=dct, levels=0, divide=2, badrange=-24)
+        vectors = core.mvsf.Recalculate (supersoft, vectors, overlap=8, blksize=16, thsad=thsad//2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=2)
+        vectors = core.mvsf.Recalculate (supersharp, vectors, overlap=4, blksize=8, thsad=thsad//2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=2)
+        vectors = core.mvsf.Recalculate (supersharp, vectors, overlap=2, blksize=4, thsad=thsad//2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=0)
         return vectors
     bv          = [search (True, i) for i in range (tr, 0, -1)]
     fv          = [search (False, i) for i in range (1, tr+1)]
@@ -257,34 +255,29 @@ def readvec (vec, login):
     vec  = core.raws.Source (vec, w, 1, src_fmt="Y8")
     return vec
 
-def compensatemulti (src, comp, pelclip, vmulti, tr=6, pel=4, thsad=400, thscd1=248, thscd2=130):
+def compensatemulti (src, comp, pelclip, vmulti, tr=6, pel=4, thsad=400, thscd1=10000, thscd2=255):
     core        = vs.get_core ()
-    srcR        = core.fmtc.bitdepth (src, bits=16, flt=False, fulls=True, fulld=True, dmode=1)
-    compR       = core.fmtc.bitdepth (comp, bits=16, flt=False, fulls=True, fulld=True, dmode=1)
-    superclip   = core.mv.Super (compR, pel=pel, chroma=False, hpad=32, vpad=32, pelclip=pelclip, sharp=2, rfilter=2, levels=0)
+    superclip   = core.mvsf.Super (comp, pel=pel, chroma=False, hpad=32, vpad=32, pelclip=pelclip, sharp=2, rfilter=2, levels=0)
     def compensate (delta):
         vectors = core.std.SelectEvery (vmulti, tr*2, delta)
-        filter  = core.mv.Compensate (srcR, superclip, vectors, thsad=thsad, thscd1=thscd1, thscd2=thscd2)
-        return core.fmtc.bitdepth (filter, bits=32, flt=True, fulls=True, fulld=True, dmode=1)
+        filter  = core.mvsf.Compensate (src, superclip, vectors, thsad=thsad, thscd1=thscd1, thscd2=thscd2)
+        return filter
     bcomp       = [compensate (i) for i in range (0, tr)]
     fcomp       = [compensate (i) for i in range (tr, 2*tr)]
     compmulti   = bcomp + [src] + fcomp
     compmulti   = core.std.Interleave (compmulti)
     return compmulti
 
-def degrainn (src, comp, pelclip, vmulti, tr=6, pel=4, thsad=400, thscd1=248, thscd2=130):
+def degrainn (src, comp, pelclip, vmulti, tr=6, pel=4, thsad=400, thscd1=10000, thscd2=255):
     core        = vs.get_core ()
-    srcR        = core.fmtc.bitdepth (src, bits=16, flt=False, fulls=True, fulld=True, dmode=1)
-    compR       = core.fmtc.bitdepth (comp, bits=16, flt=False, fulls=True, fulld=True, dmode=1)
-    superclip   = core.mv.Super (compR, pel=pel, chroma=False, hpad=32, vpad=32, pelclip=pelclip, sharp=2, rfilter=2, levels=0)
+    superclip   = core.mvsf.Super (comp, pel=pel, chroma=False, hpad=32, vpad=32, pelclip=pelclip, sharp=2, rfilter=2, levels=0)
     def MDG1 (a):
         bv      = core.std.SelectEvery (vmulti, tr*2, tr-1-a)
         fv      = core.std.SelectEvery (vmulti, tr*2, tr+a)
-        MDG     = core.mv.Degrain1 (srcR, superclip, bv, fv, thsad=thsad, thscd1=thscd1, thscd2=thscd2, plane=0, limit=65535)
+        MDG     = core.mvsf.Degrain1 (src, superclip, bv, fv, thsad=thsad, thscd1=thscd1, thscd2=thscd2, plane=0, limit=1.0)
         return MDG
     MDGMulti    = [MDG1 (i) for i in range (0, tr)]
     MDGMulti    = core.std.Interleave (MDGMulti)
-    MDGMulti    = core.fmtc.bitdepth (MDGMulti, bits=32, flt=True, fulls=True, fulld=True, dmode=1)
     def MDGMerge (start=None, a=2):
         start   = core.std.Merge (core.std.SelectEvery (MDGMulti, tr, 0), core.std.SelectEvery (MDGMulti, tr, 1), 0.5) if start is None else start
         merge   = core.std.Merge (start, core.std.SelectEvery (MDGMulti, tr, a), 1/(a+1))
@@ -341,7 +334,7 @@ def GetCSS (src):
           css = "444"
     return css
 
-def ediresample (src, w=None, h=None, sx=0, sy=0, sw=None, sh=None, kernel_u="spline64", kernel_d="spline36", taps=4, a1=None, a2=None, a3=None, css=None, fulls=False, fulld=None, cplace="mpeg2", nsize=0, nns=4, qual=2, etype=0, pscrn=1, noring=False, ratiothr=1.0, thr=1.0, elast=1.5):
+def ediresample (src, w=None, h=None, sx=0, sy=0, sw=None, sh=None, kernel_u="spline64", kernel_d="bicubic", taps=4, a1=-1, a2=0, a3=None, css=None, fulls=False, fulld=None, cplace="mpeg2", nsize=0, nns=4, qual=2, etype=0, pscrn=1, noring=False, ratiothr=1.0):
     core   = vs.get_core ()
     scss   = GetCSS (src)
     css    = scss if css is None else css
@@ -449,21 +442,28 @@ def ediresample (src, w=None, h=None, sx=0, sy=0, sw=None, sh=None, kernel_u="sp
     Luma    = core.std.ShufflePlanes (src, planes=0, colorfamily=vs.GRAY) if GetCSS (src) != "GRAY" else src
     input   = src if Gray == False else Luma
     input   = core.fmtc.resample (input, (prew if wpre else cw), (preh if hpre else ch), (prel if wpre else 0), (pret if hpre else 0), (prew if wpre else cw), (preh if hpre else ch), kernel="point", fulls=fulls, fulld=fulls) if wpre or hpre else input
-    input16 = core.fmtc.bitdepth (input, bits=16, flt=False, fulls=fulls, fulld=fulls, dmode=1)
+    inputy  = core.std.ShufflePlanes (input, planes=0, colorfamily=vs.GRAY)
+    inputu  = core.std.Expr (core.std.ShufflePlanes (input, planes=1, colorfamily=vs.GRAY), "x 0.5 +") if Gray == False else 0
+    inputv  = core.std.Expr (core.std.ShufflePlanes (input, planes=2, colorfamily=vs.GRAY), "x 0.5 +") if Gray == False else 0
+    inputp  = core.std.ShufflePlanes ([inputy, inputu, inputv], planes=[0, 0, 0], colorfamily=vs.YUV) if Gray == False else input
     if enable == False and edit == False:
        0
     elif yhct == chct and yvct == cvct and scss == "420":
-       edgeedi  = EDInter (input16, yvct, yhct, 1, 1, True, True, True, nsize, nns, qual, etype, pscrn)
+       edgeedi  = EDInter (inputp, yvct, yhct, 1, 1, True, True, True, nsize, nns, qual, etype, pscrn)
        edgeediU = core.std.ShufflePlanes (edgeedi, planes=1, colorfamily=vs.GRAY)
+       edgeediU = core.std.Expr (edgeediU, "x 0.5 -")
        edgeediV = core.std.ShufflePlanes (edgeedi, planes=2, colorfamily=vs.GRAY)
+       edgeediV = core.std.Expr (edgeediV, "x 0.5 -")
        edgeediY = core.std.ShufflePlanes (edgeedi, planes=0, colorfamily=vs.GRAY)
     else:
-       edgeediY = core.std.ShufflePlanes (input16, planes=0, colorfamily=vs.GRAY) if GetCSS (src) != "GRAY" else input16
+       edgeediY = core.std.ShufflePlanes (inputp, planes=0, colorfamily=vs.GRAY) if GetCSS (src) != "GRAY" else inputp
        edgeediY = edgeediY if Yedit == False else EDInter (edgeediY, yvct, yhct, 1, 1, True, False, False, nsize, nns, qual, etype, pscrn)
-       edgeediU = core.std.ShufflePlanes (input16, planes=1, colorfamily=vs.GRAY) if Gray == False else 0
+       edgeediU = core.std.ShufflePlanes (inputp, planes=1, colorfamily=vs.GRAY) if Gray == False else 0
        edgeediU = 0 if Uedit == False else EDInter (edgeediU, cvct, chct, 1, 1, Ut, False, False, nsize, nns, qual, etype, pscrn)
-       edgeediV = core.std.ShufflePlanes (input16, planes=2, colorfamily=vs.GRAY) if Gray == False else 0
+       edgeediU = core.std.Expr (edgeediU, "x 0.5 -") if Gray == False else 0
+       edgeediV = core.std.ShufflePlanes (inputp, planes=2, colorfamily=vs.GRAY) if Gray == False else 0
        edgeediV = 0 if Vedit == False else EDInter (edgeediV, cvct, chct, 1, 1, Vt, False, False, nsize, nns, qual, etype, pscrn)
+       edgeediV = core.std.Expr (edgeediV, "x 0.5 -") if Gray == False else 0
     yrh = yrhratio > ratiothr
     yrv = yrvratio > ratiothr
     crh = crhratio > ratiothr
@@ -475,7 +475,6 @@ def ediresample (src, w=None, h=None, sx=0, sy=0, sw=None, sh=None, kernel_u="sp
        edgeU   = 0 if Uedit == False else core.fmtc.resample (edgeediU, owc, ohc, (sxc * chrf + chfix + cphfixe), (syc * cvrf + cvfix), (swc * chrf), (shc * cvrf), kernelh=(kernel_u if crh else kernel_d), kernelv=(kernel_u if crv else kernel_d), taps=taps, a1=a1, a2=a2, a3=a3, fulls=fulls, fulld=fulls)	
        edgeV   = 0 if Vedit == False else core.fmtc.resample (edgeediV, owc, ohc, (sxc * chrf + chfix + cphfixe), (syc * cvrf + cvfix), (swc * chrf), (shc * cvrf), kernelh=(kernel_u if crh else kernel_d), kernelv=(kernel_u if crv else kernel_d), taps=taps, a1=a1, a2=a2, a3=a3, fulls=fulls, fulld=fulls)
        edge    = edgeY if Gray or Uedit == False or Vedit == False else core.std.ShufflePlanes ([edgeY, edgeU, edgeV], planes=[0, 0, 0], colorfamily=vs.YUV)
-       edge    = core.fmtc.bitdepth (edge, bits=32, flt=True, fulls=fulls, fulld=fulls, dmode=1)
     yh = yhratio > ratiothr
     yv = yvratio > ratiothr
     ch = chratio > ratiothr
@@ -492,7 +491,7 @@ def ediresample (src, w=None, h=None, sx=0, sy=0, sw=None, sh=None, kernel_u="sp
        flatV = core.std.Expr (core.std.ShufflePlanes (input, planes=2, colorfamily=vs.GRAY), "x 0.5 +") if (mixed or Vedit == False) and Vt else 0
        flatV = core.std.Expr (InterK (flatV, owc, ohc, (sxc + cphfix), syc, swc, shc, kernelh=(kernel_u if ch else kernel_d), kernelv=(kernel_u if cv else kernel_d), taps=taps, a1=a1, a2=a2, a3=a3, fulls=fulls, fulld=fulls), "x 0.5 -") if (mixed or Vedit == False) and Vt else 0	
        flat  = flatY if Gray else core.std.ShufflePlanes ([flatY, flatU, flatV], planes=[0, 0, 0], colorfamily=vs.YUV)
-    merge  = (limit_dif (flat, edge, thr=thr, elast=elast) if mixed else edge) if edit else flat
+    merge  = edge if edit else flat
     mergeY = core.std.ShufflePlanes (merge, planes=0, colorfamily=vs.GRAY)
     mergeU = core.std.ShufflePlanes (merge, planes=1, colorfamily=vs.GRAY) if Gray == False else 0
     mergeV = core.std.ShufflePlanes (merge, planes=2, colorfamily=vs.GRAY) if Gray == False else 0
@@ -505,7 +504,7 @@ def EDInter (src, vct=1, hct=1, vfield=1, hfield=1, Y=True, U=False, V=False, ns
     clip = src
     if hct >= 1:
        clip   = clip if honly else core.std.Transpose (clip)
-       clip   = core.nnedi3.nnedi3 (clip, hfield, True, Y, U, V, nsize, nns, qual, etype, pscrn)
+       clip   = core.nnedi3sf.nnedi3 (clip, hfield, True, Y, U, V, nsize, nns, qual, etype, pscrn)
        hct    = hct - 1
        honly  = hct >= 1
        hfield = 0
@@ -513,7 +512,7 @@ def EDInter (src, vct=1, hct=1, vfield=1, hfield=1, Y=True, U=False, V=False, ns
     else:
        0
     if vct >= 1 and honly == False:
-       clip   = core.nnedi3.nnedi3(clip, vfield, True, Y, U, V, nsize, nns, qual, etype, pscrn)
+       clip   = core.nnedi3sf.nnedi3(clip, vfield, True, Y, U, V, nsize, nns, qual, etype, pscrn)
        vct    = vct - 1
        vfield = 0
     else: 
