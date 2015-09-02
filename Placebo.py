@@ -174,7 +174,7 @@ def genlimitclip (src, CM=True):
 
 def sharplimit (src, sharp, str=1.0):
     core   = vs.get_core ()
-    clip   = core.std.Expr ([src, sharp], ["{x} {y} {x} - abs 4 / log 1 4 / * exp 4 * {str} * 2.7182818284590452353602874713527 * {y} {x} - {y} {x} - abs 1.001 + / * + 256 /".format (str=str, x="x 256 *", y="y 256 *")])
+    clip   = core.std.Expr ([src, sharp], ["{x} {y} {x} - abs 4 / log 1 4 / * exp 4 * {str} * 1.8920922672608582317474321099594 * {y} {x} - {y} {x} - abs 1.001 + / * + 256 /".format (str=str, x="x 256 *", y="y 256 *")])
     return clip
 
 def maxmulti (src, start=None, a=2, tr=6):
