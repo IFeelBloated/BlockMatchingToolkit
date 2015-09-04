@@ -230,9 +230,9 @@ def getvectors (src, pelclip, tr=6, pel=4, dct=5, thsad=400):
     supersharp  = core.mvsf.Super (src, pel=pel, chroma=False, hpad=32, vpad=32, pelclip=pelclip, sharp=2, rfilter=2, levels=0)
     def search (isb, delta):
         vectors = core.mvsf.Analyze (supersoft, isb=isb, overlap=16, blksize=32, search=3, chroma=False, truemotion=True, delta=delta, trymany=True, searchparam=16, pelsearch=16, dct=dct, levels=0, divide=2, badrange=-24)
-        vectors = core.mvsf.Recalculate (supersoft, vectors, overlap=8, blksize=16, thsad=thsad//2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=2)
-        vectors = core.mvsf.Recalculate (supersharp, vectors, overlap=4, blksize=8, thsad=thsad//2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=2)
-        vectors = core.mvsf.Recalculate (supersharp, vectors, overlap=2, blksize=4, thsad=thsad//2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=0)
+        vectors = core.mvsf.Recalculate (supersoft, vectors, overlap=8, blksize=16, thsad=thsad/2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=2)
+        vectors = core.mvsf.Recalculate (supersharp, vectors, overlap=4, blksize=8, thsad=thsad/2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=2)
+        vectors = core.mvsf.Recalculate (supersharp, vectors, overlap=2, blksize=4, thsad=thsad/2, chroma=False, truemotion=True, search=3, searchparam=16, dct=dct, smooth=1, divide=0)
         return vectors
     bv          = [search (True, i) for i in range (tr, 0, -1)]
     fv          = [search (False, i) for i in range (1, tr+1)]
@@ -541,3 +541,4 @@ def sigmoid_inverse (src, thr=0.5, cont=6.5):
     expr = build_sigmoid_expr ("x", True, thr, cont)
     clip = core.std.Expr ([src], [expr])
     return clip
+
