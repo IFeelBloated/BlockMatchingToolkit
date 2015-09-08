@@ -2,7 +2,7 @@ ECHO import vapoursynth as vs > TMP.vpy
 ECHO import Placebo >> TMP.vpy
 ECHO core = vs.get_core () >> TMP.vpy
 ECHO clip = core.raws.Source ("Y.rgb", 704, 576, src_fmt="GRAYS") >> TMP.vpy
-ECHO clip = Placebo.spatialnr (clip, overshoot=2.4, ring=6.4, nr=3.2, rpass=3, sstring="0.0:16.0 0.48:8.0 0.64:0.5 1.0:0.0", lowpass=4) >> TMP.vpy
+ECHO clip = Placebo.spatialnr (clip, overshoot=2.4, ring=6.4, nr=0.8, rpass=3, sstring="0.0:16.0 0.48:8.0 0.64:0.5 1.0:0.0", lowpass=4) >> TMP.vpy
 ECHO clip.set_output () >> TMP.vpy
 call vspipe TMP.vpy Spatial.rgb -p
 del TMP.vpy
