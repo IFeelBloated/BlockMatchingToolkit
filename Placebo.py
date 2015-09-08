@@ -442,28 +442,20 @@ def ediresample (src, w=None, h=None, sx=0, sy=0, sw=None, sh=None, kernel_u="sp
     Luma    = core.std.ShufflePlanes (src, planes=0, colorfamily=vs.GRAY) if GetCSS (src) != "GRAY" else src
     input   = src if Gray == False else Luma
     input   = core.fmtc.resample (input, (prew if wpre else cw), (preh if hpre else ch), (prel if wpre else 0), (pret if hpre else 0), (prew if wpre else cw), (preh if hpre else ch), kernel="point", fulls=fulls, fulld=fulls) if wpre or hpre else input
-    inputy  = core.std.ShufflePlanes (input, planes=0, colorfamily=vs.GRAY)
-    inputu  = core.std.Expr (core.std.ShufflePlanes (input, planes=1, colorfamily=vs.GRAY), "x 0.5 +") if Gray == False else 0
-    inputv  = core.std.Expr (core.std.ShufflePlanes (input, planes=2, colorfamily=vs.GRAY), "x 0.5 +") if Gray == False else 0
-    inputp  = core.std.ShufflePlanes ([inputy, inputu, inputv], planes=[0, 0, 0], colorfamily=vs.YUV) if Gray == False else input
     if enable == False and edit == False:
        0
     elif yhct == chct and yvct == cvct and scss == "420":
-       edgeedi  = EDInter (inputp, yvct, yhct, 1, 1, True, True, True, nsize, nns, qual, etype, pscrn)
-       edgeediU = core.std.ShufflePlanes (edgeedi, planes=1, colorfamily=vs.GRAY)
-       edgeediU = core.std.Expr (edgeediU, "x 0.5 -")
-       edgeediV = core.std.ShufflePlanes (edgeedi, planes=2, colorfamily=vs.GRAY)
-       edgeediV = core.std.Expr (edgeediV, "x 0.5 -")
+       edgeedi  = EDInter (input, yvct, yhct, 1, 1, [0, 1, 2], nsize, nns, qual, etype, pscrn)
        edgeediY = core.std.ShufflePlanes (edgeedi, planes=0, colorfamily=vs.GRAY)
+       edgeediU = core.std.Expr (core.std.ShufflePlanes (edgeedi, planes=1, colorfamily=vs.GRAY), "x 0.5 +")
+       edgeediV = core.std.Expr (core.std.ShufflePlanes (edgeedi, planes=2, colorfamily=vs.GRAY), "x 0.5 +")
     else:
-       edgeediY = core.std.ShufflePlanes (inputp, planes=0, colorfamily=vs.GRAY) if GetCSS (src) != "GRAY" else inputp
-       edgeediY = edgeediY if Yedit == False else EDInter (edgeediY, yvct, yhct, 1, 1, True, False, False, nsize, nns, qual, etype, pscrn)
-       edgeediU = core.std.ShufflePlanes (inputp, planes=1, colorfamily=vs.GRAY) if Gray == False else 0
-       edgeediU = 0 if Uedit == False else EDInter (edgeediU, cvct, chct, 1, 1, Ut, False, False, nsize, nns, qual, etype, pscrn)
-       edgeediU = core.std.Expr (edgeediU, "x 0.5 -") if Gray == False else 0
-       edgeediV = core.std.ShufflePlanes (inputp, planes=2, colorfamily=vs.GRAY) if Gray == False else 0
-       edgeediV = 0 if Vedit == False else EDInter (edgeediV, cvct, chct, 1, 1, Vt, False, False, nsize, nns, qual, etype, pscrn)
-       edgeediV = core.std.Expr (edgeediV, "x 0.5 -") if Gray == False else 0
+       edgeediY = core.std.ShufflePlanes (input, planes=0, colorfamily=vs.GRAY) if GetCSS (src) != "GRAY" else input
+       edgeediY = edgeediY if Yedit == False else EDInter (edgeediY, yvct, yhct, 1, 1, 0, nsize, nns, qual, etype, pscrn)
+       edgeediU = core.std.Expr (core.std.ShufflePlanes (input, planes=1, colorfamily=vs.GRAY), "x 0.5 +") if Gray == False else 0
+       edgeediU = 0 if Uedit == False else EDInter (edgeediU, cvct, chct, 1, 1, 0, nsize, nns, qual, etype, pscrn)
+       edgeediV = core.std.Expr (core.std.ShufflePlanes (input, planes=2, colorfamily=vs.GRAY), "x 0.5 +") if Gray == False else 0
+       edgeediV = 0 if Vedit == False else EDInter (edgeediV, cvct, chct, 1, 1, 0, nsize, nns, qual, etype, pscrn)
     yrh = yrhratio > ratiothr
     yrv = yrvratio > ratiothr
     crh = crhratio > ratiothr
@@ -472,8 +464,8 @@ def ediresample (src, w=None, h=None, sx=0, sy=0, sw=None, sh=None, kernel_u="sp
        0
     else:
        edgeY   = edgeediY if Yedit == False else core.fmtc.resample (edgeediY, ow, oh, (sx * yhrf + yhfix), (sy * yvrf + yvfix), (sw * yhrf), (sh * yvrf), kernelh=(kernel_u if yrh else kernel_d), kernelv=(kernel_u if yrv else kernel_d), taps=taps, a1=a1, a2=a2, a3=a3, fulls=fulls, fulld=fulls)
-       edgeU   = 0 if Uedit == False else core.fmtc.resample (edgeediU, owc, ohc, (sxc * chrf + chfix + cphfixe), (syc * cvrf + cvfix), (swc * chrf), (shc * cvrf), kernelh=(kernel_u if crh else kernel_d), kernelv=(kernel_u if crv else kernel_d), taps=taps, a1=a1, a2=a2, a3=a3, fulls=fulls, fulld=fulls)	
-       edgeV   = 0 if Vedit == False else core.fmtc.resample (edgeediV, owc, ohc, (sxc * chrf + chfix + cphfixe), (syc * cvrf + cvfix), (swc * chrf), (shc * cvrf), kernelh=(kernel_u if crh else kernel_d), kernelv=(kernel_u if crv else kernel_d), taps=taps, a1=a1, a2=a2, a3=a3, fulls=fulls, fulld=fulls)
+       edgeU   = 0 if Uedit == False else core.std.Expr (core.fmtc.resample (edgeediU, owc, ohc, (sxc * chrf + chfix + cphfixe), (syc * cvrf + cvfix), (swc * chrf), (shc * cvrf), kernelh=(kernel_u if crh else kernel_d), kernelv=(kernel_u if crv else kernel_d), taps=taps, a1=a1, a2=a2, a3=a3, fulls=fulls, fulld=fulls), "x 0.5 -")	
+       edgeV   = 0 if Vedit == False else core.std.Expr (core.fmtc.resample (edgeediV, owc, ohc, (sxc * chrf + chfix + cphfixe), (syc * cvrf + cvfix), (swc * chrf), (shc * cvrf), kernelh=(kernel_u if crh else kernel_d), kernelv=(kernel_u if crv else kernel_d), taps=taps, a1=a1, a2=a2, a3=a3, fulls=fulls, fulld=fulls), "x 0.5 -")
        edge    = edgeY if Gray or Uedit == False or Vedit == False else core.std.ShufflePlanes ([edgeY, edgeU, edgeV], planes=[0, 0, 0], colorfamily=vs.YUV)
     yh = yhratio > ratiothr
     yv = yvratio > ratiothr
@@ -499,12 +491,12 @@ def ediresample (src, w=None, h=None, sx=0, sy=0, sw=None, sh=None, kernel_u="sp
     Range  = core.fmtc.bitdepth (mergeF, fulls=fulls, fulld=fulld, dmode=1) if fulls != fulld else mergeF
     return Range
 
-def EDInter (src, vct=1, hct=1, vfield=1, hfield=1, Y=True, U=False, V=False, nsize=0, nns=4, qual=2, etype=0, pscrn=1, honly=False):
+def EDInter (src, vct=1, hct=1, vfield=1, hfield=1, planes=0, nsize=0, nns=4, qual=2, etype=0, pscrn=1, honly=False):
     core = vs.get_core ()
     clip = src
     if hct >= 1:
        clip   = clip if honly else core.std.Transpose (clip)
-       clip   = core.nnedi3sf.nnedi3 (clip, hfield, True, Y, U, V, nsize, nns, qual, etype, pscrn)
+       clip   = core.nnedi3.nnedi3 (clip, field=hfield, dh=True, planes=planes, nsize=nsize, nns=nns, qual=qual, etype=etype, pscrn=pscrn)
        hct    = hct - 1
        honly  = hct >= 1
        hfield = 0
@@ -512,12 +504,12 @@ def EDInter (src, vct=1, hct=1, vfield=1, hfield=1, Y=True, U=False, V=False, ns
     else:
        0
     if vct >= 1 and honly == False:
-       clip   = core.nnedi3sf.nnedi3(clip, vfield, True, Y, U, V, nsize, nns, qual, etype, pscrn)
+       clip   = core.nnedi3.nnedi3(clip, field=vfield, dh=True, planes=planes, nsize=nsize, nns=nns, qual=qual, etype=etype, pscrn=pscrn)
        vct    = vct - 1
        vfield = 0
     else: 
        0
-    clip = (clip if vct <= 0 and hct <= 0 else EDInter (clip, vct, hct, vfield, hfield, Y, U, V, nsize, nns, qual, etype, pscrn, honly)) if Y or U or V else src
+    clip = clip if vct <= 0 and hct <= 0 else EDInter (clip, vct, hct, vfield, hfield, planes, nsize, nns, qual, etype, pscrn, honly)
     return clip
 
 ### Curves ###
@@ -541,5 +533,6 @@ def sigmoid_inverse (src, thr=0.5, cont=6.5):
     expr = build_sigmoid_expr ("x", True, thr, cont)
     clip = core.std.Expr ([src], [expr])
     return clip
+
 
 
