@@ -68,7 +68,7 @@ def halonr (src, a=32, h=6.4, thr=1.0, elast=1.5):
 
 def ringnr (src, a=32, h=2.1333333333333333333333333333333, repeat=1, lowpass=8):
     core    = vs.get_core ()
-    pad     = padding (src, a, a, a, a)
+    pad     = padding (src, a+1, a+1, a+1, a+1)
     def ringnr (src, h, n):
         flt = core.knlm.KNLMeansCL (src, d=0, a=a, s=1, h=h)
         n   = n - 1
@@ -79,19 +79,19 @@ def ringnr (src, a=32, h=2.1333333333333333333333333333333, repeat=1, lowpass=8)
     Dif     = core.knlm.KNLMeansCL (Dif, d=0, a=a, s=1, h=h, rclip=Clean)
     HClip   = core.std.MergeDiff (Clean, Dif)
     Final   = core.std.MergeDiff (gauss (pad, p=lowpass), core.std.MakeDiff (HClip, gauss (HClip, p=lowpass)))
-    clip    = core.std.CropRel (Final, a, a, a, a)
+    clip    = core.std.CropRel (Final, a+1, a+1, a+1, a+1)
     return clip
 
 def spatialnr (src, a=32, h=1.2, sbsize=33, sstring="0.0:16.0 0.48:8.0 0.64:0.5 1.0:0.0", lowpass=12):
     core    = vs.get_core ()
-    pad     = padding (src, a, a, a, a)
+    pad     = padding (src, a+4, a+4, a+4, a+4)
     NLM     = core.knlm.KNLMeansCL (pad, d=0, a=a, s=4, h=h)
     DFT     = core.dfttest.DFTTest (pad, sstring=sstring, sbsize=sbsize, sosize=0, smode=0, tosize=0, tbsize=1, tmode=0)
     MRG     = core.std.MakeDiff (NLM, gauss (NLM, p=lowpass)).std.MergeDiff (gauss (DFT, p=lowpass))
     Dif     = core.std.MakeDiff (pad, MRG)
     Dif     = core.knlm.KNLMeansCL (Dif, d=0, a=a, s=4, h=h, rclip=MRG)
     Final   = core.std.MergeDiff (MRG, Dif)
-    clip    = core.std.CropRel (Final, a, a, a, a)
+    clip    = core.std.CropRel (Final, a+4, a+4, a+4, a+4)
     return clip
 
 def nrfinal (spatial, dif, peldif, vmulti, pel=4, tr=6, thsad=10000, thscd1=10000, thscd2=255, repmode=13):
