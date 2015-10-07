@@ -185,7 +185,7 @@ def shrinksharp (src):
 
 def deconv (src):
     core  = vs.get_core ()
-    dcv   = core.vcfreq.Restore (src, line=0, wn=0.99, x=1, y=1, fr=25, scale=0.0059)
+    dcv   = core.vcfreq.Sharp (src, line=0, wn=0.99, x=1, y=1, fr=25, scale=0.0059)
     hif   = core.std.MakeDiff (dcv, gauss (dcv, 8))
     clip  = core.std.MergeDiff (gauss (src, 8), hif)
     return clip
