@@ -117,7 +117,7 @@ def ringnr (src, a=32, h=6.4, divide=4, thr=0.03125, elast=None, lowpass=8):
 
 def spatialnr (src, a=32, h=1.2, sbsize=None, sstring="0.0:16.0 0.48:8.0 0.64:0.5 1.0:0.0", lowpass=12):
     core    = vs.get_core ()
-    sbsize  = 2*a+1 if sbsize is None else sbsize
+    sbsize  = math.ceil (a/2) * 2 + 1
     hfloor  = math.floor (h)
     hcoarse = (hfloor * 2.1445390776269709272958045814962) + (h - hfloor)
     pad     = padding (src, a+4, a+4, a+4, a+4)
