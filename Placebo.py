@@ -18,12 +18,12 @@ def padding (src, left=0, right=0, top=0, bottom=0):
 
 def xymax (src1, src2):
     core   = vs.get_core ()
-    clip   = core.std.Expr ([src1, src2], ["x y > x y ?"])
+    clip   = core.std.Expr ([src1, src2], ["x y max"])
     return clip
 
 def xymin (src1, src2):
     core   = vs.get_core ()
-    clip   = core.std.Expr ([src1, src2], ["x y > y x ?"])
+    clip   = core.std.Expr ([src1, src2], ["x y min"])
     return clip
 
 def max_dif (src1, src2, ref):
@@ -54,8 +54,29 @@ def thr_merge (flt, src, ref=None, thr=0.0009765625, elast=None):
     clip  = core.std.Expr ([flt, ref, UDN, src], ["x y - abs {thr} {elast} + < z a ?".format (thr=thr, elast=elast)])
     return clip
 
+def clamp (src, bright_limit, dark_limit, overshoot=0.0, undershoot=0.0):
+    core = vs.get_core ()
+    clip = core.std.Expr ([src, bright_limit, dark_limit], ["x y {os} + > y {os} + x ? z {us} - < z {us} - x ?".format (os=overshoot, us=undershoot)])
+    return clip
+
+def maxmulti (src, start=None, a=2, tr=6):
+    core   = vs.get_core ()
+    start  = xymax (core.std.SelectEvery (src, tr*2+1, 0), core.std.SelectEvery (src, tr*2+1, 1)) if start is None else start
+    max    = xymax (start, core.std.SelectEvery (src, tr*2+1, a))
+    a      = a+1
+    clip   = max if a == tr*2+1 else maxmulti (src, start=max, tr=tr, a=a)
+    return clip
+
+def minmulti (src, start=None, a=2, tr=6):
+    core   = vs.get_core ()
+    start  = xymin (core.std.SelectEvery (src, tr*2+1, 0), core.std.SelectEvery (src, tr*2+1, 1)) if start is None else start
+    min    = xymin (start, core.std.SelectEvery (src, tr*2+1, a))
+    a      = a+1
+    clip   = min if a == tr*2+1 else minmulti (src, start=min, tr=tr, a=a)
+    return clip
+
 ### Denoise ###
-def halonr (src, a=32, h=6.4, thr=0.00390625, elast=None):
+def halonr (src, a=12, h=6.4, thr=0.00390625, elast=None):
     core    = vs.get_core ()
     elast   = thr / 6 if elast is None else elast
     pad     = padding (src, a, a, a, a)
@@ -69,7 +90,7 @@ def halonr (src, a=32, h=6.4, thr=0.00390625, elast=None):
     clip    = core.std.CropRel (Final, a, a, a, a)
     return clip
 
-def ringnr (src, a=32, h=6.4, divide=4, thr=0.03125, elast=None, lowpass=8):
+def ringnr (src, a=12, h=6.4, divide=4, thr=0.03125, elast=None, lowpass=8):
     core    = vs.get_core ()
     elast   = thr / 8 if elast is None else elast
     hfine   = h / divide
@@ -94,8 +115,9 @@ def ringnr (src, a=32, h=6.4, divide=4, thr=0.03125, elast=None, lowpass=8):
     clip    = core.std.CropRel (mrg, a+1, a+1, a+1, a+1)
     return clip
 
-def spatialnr (src, a=32, h=1.2, sbsize=33, sstring="0.0:16.0 0.48:8.0 0.64:0.5 1.0:0.0", lowpass=12):
+def spatialnr (src, a=12, h=1.2, sbsize=None, sstring="0.0:16.0 0.48:8.0 0.64:0.5 1.0:0.0", lowpass=12):
     core    = vs.get_core ()
+    sbsize  = 2*a+1 if sbsize is None else sbsize
     hfloor  = math.floor (h)
     hcoarse = (hfloor * 2.1445390776269709272958045814962) + (h - hfloor)
     pad     = padding (src, a+4, a+4, a+4, a+4)
@@ -117,6 +139,94 @@ def nrfinal (spatial, dif, peldif, vmulti, pel=4, tr=6, thsad=10000, thscd1=1000
     repclip   = core.std.MergeDiff (spatial, dif)
     clip      = core.rgsf.Repair (NR, repclip, repmode)
     return clip
+
+### Sharpen ###
+def cmsharp (src):
+    core   = vs.get_core ()
+    w      = src.width
+    h      = src.height
+    def inline (clp, n):
+        wc     = clp.width
+        hc     = clp.height
+        blur   = core.fmtc.resample (clp, wc*4, hc*4, kernel="cubic", a1=1, a2=0, fulls=True, fulld=True)
+        sharp  = core.fmtc.resample (clp, wc*4, hc*4, kernel="cubic", a1=-1, a2=0, fulls=True, fulld=True)
+        dif    = core.std.MakeDiff (blur, sharp)
+        dif    = core.fmtc.resample (dif, wc, hc, kernel="gauss", a1=100, fulls=True, fulld=True)
+        clp    = core.std.MergeDiff (clp, dif)
+        n      = n-1
+        return clp if n == 0 else inline (clp, n)
+    up2x   = ediresample (src, w*2, h*2, noring=True, kernel_u="spline", kernel_d="spline", taps=6, fulls=True, fulld=True)
+    cblur  = inline (up2x, 4)
+    cdif   = core.std.MakeDiff (cblur, up2x)
+    cdif   = core.fmtc.resample (cdif, w, h, kernel="gauss", a1=100, fulls=True, fulld=True)
+    cblur  = core.std.MergeDiff (src, cdif)
+    mblur  = core.flt.Median (src)
+    blur   = min_dif (cblur, mblur, src)
+    sharp  = core.std.MergeDiff (src, core.std.MakeDiff (src, blur))
+    clip   = core.std.MergeDiff (gauss (src, 16), core.std.MakeDiff (sharp, gauss (sharp, 16)))
+    return clip
+
+def shrinksharp (src):
+    core   = vs.get_core ()
+    def sbr (src):
+        rg11   = core.rgsf.RemoveGrain (src, 11)
+        rg11D  = core.std.MakeDiff (src, rg11)
+        rg11DR = core.rgsf.RemoveGrain (rg11D, 11)
+        rg11DD = core.std.Expr ([rg11D, rg11DR], ["x y - x 0.5 - * 0 < 0.5 x y - abs x 0.5 - abs < x y - 0.5 + x ? ?"])
+        clip   = core.std.MakeDiff (src, rg11DD)
+        return clip
+    blur   = core.flt.Median (src)
+    dif    = core.std.Expr ([src, blur], ["y x - 3 * 0.5 +"])
+    dif    = sbr (dif)
+    difrg  = core.rgsf.RemoveGrain (dif, 11)
+    fdif   = core.std.Expr ([dif, difrg], ["y 0.5 - abs x 0.5 - abs > y 0.5 ?"])
+    clip   = core.std.MergeDiff (src, fdif)
+    return clip
+
+def deconv (src):
+    core  = vs.get_core ()
+    dcv   = core.vcfreq.Restore (src, line=0, wn=0.99, x=1, y=1, fr=25, scale=0.0059)
+    hif   = core.std.MakeDiff (dcv, gauss (dcv, 8))
+    clip  = core.std.MergeDiff (gauss (src, 8), hif)
+    return clip
+
+def spatiallimit (src, sharp, neighbor=None, str=1.0):
+    core      = vs.get_core ()
+    neighbor  = src if neighbor is None else neighbor
+    nonlinear = core.std.Expr ([src, sharp], ["{x} {y} {x} - abs 4 / 1 4 / pow 4 * 1.6 * {str} * {y} {x} - {y} {x} - abs 1.001 + / * + 256 /".format (str=str, x="x 256 *", y="y 256 *")])
+    linear    = core.std.Expr ([src, sharp], ["y x - {str} * x +".format (str=str)])
+    local     = min_dif (nonlinear, linear, src)
+    bright    = core.flt.Maximum (neighbor)
+    dark      = core.flt.Minimum (neighbor)
+    clip      = clamp (local, bright, dark, overshoot=0.0, undershoot=0.0)
+    return clip
+
+def genlimitclip (src, CM=True, str=1.0):
+    core      = vs.get_core ()
+    if CM:
+       sharp  = cmsharp (src)
+    else:
+       sharp  = shrinksharp (src)
+    amplify   = spatiallimit (src, sharp, str=str*3)
+    normalize = spatiallimit (src, amplify, str=str)
+    clip      = core.std.MergeDiff (gauss (src, 4), core.std.MakeDiff (normalize, gauss (normalize, 4)))
+    return clip
+
+def sharpcalmer (soft, dif, limit, peldif, pellimit, vmulti, pel=4, tr=6, thsadA=10000, thsadL=400, thscd1=10000, thscd2=255, repmode=13, str=1.00):
+    core     = vs.get_core ()
+    blankd   = core.std.Expr ([dif], "0.5")
+    superdif = core.mvsf.Super (dif, pel=pel, chroma=False, hpad=32, vpad=32, pelclip=peldif, sharp=2, rfilter=2, levels=0)
+    supercmp = core.mvsf.Super (limit, pel=pel, chroma=False, hpad=32, vpad=32, pelclip=pellimit, sharp=2, rfilter=2, levels=0)
+    MDG      = mvmulti.DegrainN (blankd, superdif, vmulti, tr=tr, thsad=thsadA, thscd1=thscd1, thscd2=thscd2, plane=0, limit=1.0)
+    TA       = core.std.MergeDiff (soft, MDG)
+    repclip  = core.std.MergeDiff (soft, dif)
+    TAR      = core.rgsf.Repair (TA, repclip, repmode)
+    comp     = mvmulti.Compensate (soft, supercmp, vmulti, tr=tr, thsad=thsadL, thscd1=thscd1, thscd2=thscd2)
+    max      = maxmulti (comp, tr=tr)
+    min      = minmulti (comp, tr=tr)
+    TL       = clamp (TAR, max, min, 0.0, 0.0)
+    Final    = spatiallimit (soft, sharp=TL, neighbor=limit, str=str)
+    return Final
 
 ### ME & MC ###
 def genpelclip (src, pel=4):
