@@ -76,7 +76,7 @@ def minmulti (src, start=None, a=2, tr=6):
     return clip
 
 ### Denoise ###
-def halonr (src, a=12, h=6.4, thr=0.00390625, elast=None):
+def halonr (src, a=32, h=6.4, thr=0.00390625, elast=None):
     core    = vs.get_core ()
     elast   = thr / 6 if elast is None else elast
     pad     = padding (src, a, a, a, a)
@@ -90,7 +90,7 @@ def halonr (src, a=12, h=6.4, thr=0.00390625, elast=None):
     clip    = core.std.CropRel (Final, a, a, a, a)
     return clip
 
-def ringnr (src, a=12, h=6.4, divide=4, thr=0.03125, elast=None, lowpass=8):
+def ringnr (src, a=32, h=6.4, divide=4, thr=0.03125, elast=None, lowpass=8):
     core    = vs.get_core ()
     elast   = thr / 8 if elast is None else elast
     hfine   = h / divide
@@ -115,7 +115,7 @@ def ringnr (src, a=12, h=6.4, divide=4, thr=0.03125, elast=None, lowpass=8):
     clip    = core.std.CropRel (mrg, a+1, a+1, a+1, a+1)
     return clip
 
-def spatialnr (src, a=12, h=1.2, sbsize=None, sstring="0.0:16.0 0.48:8.0 0.64:0.5 1.0:0.0", lowpass=12):
+def spatialnr (src, a=32, h=1.2, sbsize=None, sstring="0.0:16.0 0.48:8.0 0.64:0.5 1.0:0.0", lowpass=12):
     core    = vs.get_core ()
     sbsize  = 2*a+1 if sbsize is None else sbsize
     hfloor  = math.floor (h)
