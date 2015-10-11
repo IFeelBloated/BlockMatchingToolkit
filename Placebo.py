@@ -93,7 +93,6 @@ def halonr (src, a=32, h=6.4, thr=0.00390625, elast=None):
 def ringnr (src, a=32, h=6.4, divide=4, thr=0.03125, elast=None, lowpass=8):
     core    = vs.get_core ()
     elast   = thr / 8 if elast is None else elast
-    hfine   = h / divide
     hcoarse = h / (divide - 1)
     hfloor  = math.floor (hcoarse)
     hultra  = (hfloor * 2.1445390776269709272958045814962) + (hcoarse - hfloor)
