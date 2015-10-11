@@ -95,22 +95,24 @@ def ringnr (src, a=32, h=6.4, divide=4, thr=0.03125, elast=None, lowpass=8):
     elast   = thr / 8 if elast is None else elast
     hfine   = h / divide
     hcoarse = h / (divide - 1)
+    hfloor  = math.floor (hcoarse)
+    hultra  = (hfloor * 2.1445390776269709272958045814962) + (hcoarse - hfloor)
     pad     = padding (src, a+1, a+1, a+1, a+1)
-    def inline (src, h, n):
-        flt = core.knlm.KNLMeansCL (src, d=0, a=a, s=1, h=h)
-        n   = n - 1
-        return flt if n == 0 else inline (flt, h, n)
     coarse  = core.knlm.KNLMeansCL (pad, d=0, a=a, s=1, h=h)
-    fine    = inline (pad, hfine, divide)
-    fine    = min_dif (fine, coarse, pad)
+    def inline (flt, n):
+        flt = coarse if n == divide else flt
+        dif = core.std.MakeDiff (pad, flt)
+        dif = core.knlm.KNLMeansCL (dif, d=0, a=a, s=1, h=h*n/divide, rclip=flt)
+        fnl = core.std.MergeDiff (flt, dif)
+        n   = n - 1
+        return fnl if n == 0 else inline (fnl, n)
+    fine    = inline (None, divide)
     coarse  = core.rgsf.Repair (fine, coarse, mode=1)
     ref     = thr_merge (fine, coarse, thr=thr, elast=elast)
     clean   = core.knlm.KNLMeansCL (pad, d=0, a=a, s=1, h=hcoarse, rclip=ref)
     dif     = core.std.MakeDiff (pad, clean)
-    dif     = core.knlm.KNLMeansCL (dif, d=0, a=a, s=1, h=hcoarse, rclip=clean)
-    fine    = core.std.MergeDiff (clean, dif)
-    coarse  = core.rgsf.Repair (fine, clean, mode=9)
-    hif     = thr_merge (fine, coarse, thr=thr, elast=elast)
+    dif     = core.knlm.KNLMeansCL (dif, d=0, a=a, s=1, h=hultra, rclip=clean)
+    hif     = core.std.MergeDiff (clean, dif)
     mrg     = core.std.MergeDiff (gauss (pad, p=lowpass), core.std.MakeDiff (hif, gauss (hif, p=lowpass)))
     clip    = core.std.CropRel (mrg, a+1, a+1, a+1, a+1)
     return clip
