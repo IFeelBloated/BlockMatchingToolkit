@@ -1,0 +1,41 @@
+import vapoursynth as vs
+import Placebo as pb
+core = vs.get_core()
+
+
+
+
+
+
+
+
+clp = core.d2v.Source ("D:/CIMW/VID.d2v")
+clp = core.std.ShufflePlanes(clp, planes=0, colorfamily=vs.GRAY)
+clp = core.fmtc.bitdepth(clp, fulls=False, fulld=True, bits=32, flt=True)
+
+ref0  = core.knlm.KNLMeansCL (clp, d=0, a=32, s=1, h=6.4)
+st0 = core.knlm.KNLMeansCL (clp, d=0, a=32, s=4, h=2.4, rclip=ref0)
+
+coarse  = core.knlm.KNLMeansCL (st0, d=0, a=32, s=1, h=4.8)
+dif = core.std.MakeDiff(st0,coarse)
+dif = core.knlm.KNLMeansCL (dif, d=0, a=32, s=1, h=4.8, rclip=coarse)
+st1 = core.std.MergeDiff(coarse,dif)
+
+dif = core.std.MakeDiff(st0,st1)
+dif = core.knlm.KNLMeansCL (dif, d=0, a=32, s=1, h=3.6, rclip=st1)
+st2 = core.std.MergeDiff(st1,dif)
+
+dif = core.std.MakeDiff(st0,st2)
+dif = core.knlm.KNLMeansCL (dif, d=0, a=32, s=1, h=2.4, rclip=st2)
+st3 = core.std.MergeDiff(st2,dif)
+
+dif = core.std.MakeDiff(st0,st3)
+dif = core.knlm.KNLMeansCL (dif, d=0, a=32, s=1, h=1.2, rclip=st3)
+st4 = core.std.MergeDiff(st3,dif)
+
+hif = core.knlm.KNLMeansCL (clp, d=0, a=32, s=0, h=0.1, rclip=st4)
+clp = core.std.MergeDiff (pb.gauss (clp, p=8), core.std.MakeDiff (hif, pb.gauss (hif, p=8)))
+clp = pb.halonr (clp, thr=0.015625)
+clp = pb.spatialnr (clp, h=2.4, lowpass=8, sstring="0.0:48.0 0.48:24.0 0.64:0.5 1.0:0.0")
+
+clp.set_output ()
