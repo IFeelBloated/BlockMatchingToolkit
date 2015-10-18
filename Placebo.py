@@ -93,27 +93,26 @@ def halonr (src, a=32, h=6.4, thr=0.00390625, elast=None):
 def ringnr (src, a=32, h=6.4, divide=4, thr=0.03125, elast=None, lowpass=8):
     core    = vs.get_core ()
     elast   = thr / 8 if elast is None else elast
-    hcoarse = h / (divide - 1)
-    hfloor  = math.floor (hcoarse)
-    hultra  = (hfloor * 2.1445390776269709272958045814962) + (hcoarse - hfloor)
-    pad     = padding (src, a+1, a+1, a+1, a+1)
-    coarse  = core.knlm.KNLMeansCL (pad, d=0, a=a, s=1, h=h)
+    hfine   = h * (divide - 1) / divide
+    hfiner  = hfine * 2 / divide
+    pad     = padding (src, a+4, a+4, a+4, a+4)
+    ref     = core.knlm.KNLMeansCL (pad, d=0, a=a, s=1, h=h)
+    init    = core.knlm.KNLMeansCL (pad, d=0, a=a, s=4, h=hfiner, rclip=ref)
+    init    = thr_merge (pad, init, thr=thr, elast=elast)
+    coarse  = core.knlm.KNLMeansCL (init, d=0, a=a, s=1, h=hfine)
     def inline (flt, n):
         flt = coarse if n == divide else flt
-        dif = core.std.MakeDiff (pad, flt)
-        dif = core.knlm.KNLMeansCL (dif, d=0, a=a, s=1, h=h*n/divide, rclip=flt)
+        dif = core.std.MakeDiff (init, flt)
+        dif = core.knlm.KNLMeansCL (dif, d=0, a=a, s=1, h=hfine*n/divide, rclip=flt)
         fnl = core.std.MergeDiff (flt, dif)
         n   = n - 1
         return fnl if n == 0 else inline (fnl, n)
     fine    = inline (None, divide)
+    coarse  = core.knlm.KNLMeansCL (fine, d=0, a=a, s=1, h=hfiner)
     coarse  = core.rgsf.Repair (fine, coarse, mode=1)
-    ref     = thr_merge (fine, coarse, thr=thr, elast=elast)
-    clean   = core.knlm.KNLMeansCL (pad, d=0, a=a, s=1, h=hcoarse, rclip=ref)
-    dif     = core.std.MakeDiff (pad, clean)
-    dif     = core.knlm.KNLMeansCL (dif, d=0, a=a, s=1, h=hultra, rclip=clean)
-    hif     = core.std.MergeDiff (clean, dif)
+    hif     = thr_merge (fine, coarse, thr=thr, elast=elast)
     mrg     = core.std.MergeDiff (gauss (pad, p=lowpass), core.std.MakeDiff (hif, gauss (hif, p=lowpass)))
-    clip    = core.std.CropRel (mrg, a+1, a+1, a+1, a+1)
+    clip    = core.std.CropRel (mrg, a+4, a+4, a+4, a+4)
     return clip
 
 def spatialnr (src, a=32, h=1.2, sbsize=None, sstring="0.0:16.0 0.48:8.0 0.64:0.5 1.0:0.0", lowpass=12):
