@@ -1,0 +1,21 @@
+### Curves ###
+def build_sigmoid_expr (string, inv=False, thr=0.5, cont=6.5):
+    x1m0 = "1 {thr} 1 - {cont} * exp 1 + / 1 {cont} {thr} * exp 1 + / -".format (thr=thr, cont=cont)
+    x0   = "1 {cont} {thr} * exp 1 + /".format (thr=thr, cont=cont)
+    if inv:
+       expr = "{thr} 1 " + string + " {x1m0} * {x0} + 0.000001 max / 1 - 0.000001 max log {cont} / -".format (x1m0=x1m0, x0=x0, thr=thr, cont=cont)
+    else:
+       expr = "1 1 {cont} {thr} " + string + " - * exp + / {x0} - {x1m0} /".format (x1m0=x1m0, x0=x0, thr=thr, cont=cont)
+    return expr.format (thr=thr, cont=cont)
+
+def sigmoid_direct (src, thr=0.5, cont=6.5):
+    core = vs.get_core ()
+    expr = build_sigmoid_expr ("x", False, thr, cont)
+    clip = core.std.Expr ([src], [expr])
+    return clip
+
+def sigmoid_inverse (src, thr=0.5, cont=6.5):
+    core = vs.get_core ()
+    expr = build_sigmoid_expr ("x", True, thr, cont)
+    clip = core.std.Expr ([src], [expr])
+    return clip
