@@ -108,7 +108,7 @@ def hipass (src, sharp, p=16):
     return clip
 
 ### Denoisers ###
-def halonr (src, rclip=None, a=32, h=6.4, thr=0.00390625, elast=None):
+def halonr (src, a=32, h=6.4, thr=0.00390625, elast=None, lowpass=8):
     core          = vs.get_core ()
     NLMeans       = core.knlm.KNLMeansCL
     Canny         = core.tcanny.TCanny
@@ -119,71 +119,55 @@ def halonr (src, rclip=None, a=32, h=6.4, thr=0.00390625, elast=None):
     MaskedMerge   = core.std.MaskedMerge
     elast         = thr / 6 if elast is None else elast
     pad           = padding (src, a, a, a, a)
-    padref        = pad if rclip is None else padding (rclip, a, a, a, a)
-    Clean         = NLMeans (pad, d=0, a=a, s=0, h=h, rclip=padref)
-    CLNRef        = 0 if rclip is None else NLMeans (padref, d=0, a=a, s=0, h=h)
-    EMask         = Canny (Clean, **canny_args) if rclip is None else Canny (CLNRef, **canny_args)
-    EMask         = Expr (EMask, "x 0.24 - 3.2 * 0.0 max 1.0 min")
-    EMask         = Expand (EMask)
-    EMask         = Inflate (EMask)
+    Clean         = hipass (pad, NLMeans (pad, d=0, a=a, s=0, h=h, rclip=pad), p=lowpass)
+    EMask         = Canny (Clean, **canny_args)
+    EMask         = Expr (EMask, "x 0.24 - 128.0 * 0.0 max 1.0 min")
+    EMask         = Expand (Inflate (Expand (EMask)))
     MRG           = MaskedMerge (pad, Clean, EMask)
     Final         = thr_merge (pad, MRG, thr=thr, elast=elast)
     clip          = Crop (Final, a, a, a, a)
     return clip
 
-def crapnr (src, pelclip=None, nrlevel=1, a=32, h1=None, h2=None, divide=4, tr=6, pel=4, dct=5, thsad=2000, thscd1=10000, thscd2=255):
+def crapnr (src, pelclip=None, nrlevel=1, h=None, tr=6, pel=4, thsad=2000, thscd1=10000, thscd2=255):
     core          = vs.get_core ()
     NLMeans       = core.knlm.KNLMeansCL
-    Median        = core.flt.Median
-    Repair        = core.rgsf.Repair
     MakeDiff      = core.std.MakeDiff
     MergeDiff     = core.std.MergeDiff
     Crop          = core.std.CropRel
-    Expr          = core.std.Expr
     MSuper        = core.mvsf.Super
     MAnalyze      = mvmulti.Analyze
     MDegrainN     = mvmulti.DegrainN
     if (nrlevel == 1):
-       h1         = 9.6 if h1 is None else h1
-       h2         = 6.4 if h2 is None else h2
+       h          = 6.4 if h is None else h
     if (nrlevel == 2):
-       h1         = 128.0 if h1 is None else h1
-       h2         = 7.2 if h2 is None else h2
-    hfine         = h2 * 2 / divide
-    den           = divide - 1
-    windmin       = a // pow (2, den)
-    supsrh        = MSuper (src, pelclip=pelclip, rfilter=4, pel=pel, **msuper_args)
-    suprdr        = MSuper (src, pelclip=pelclip, rfilter=2, pel=pel, **msuper_args)
-    vmulti        = MAnalyze (supsrh, overlap=2, blksize=4, divide=0, tr=tr, dct=dct, **manalyze_args)
-    clean         = MDegrainN (src, suprdr, vmulti, tr=tr, thsad=thsad, thscd1=thscd1, thscd2=thscd2, **mdegrain_args)
-    ref           = padding (Repair (clean, src, mode=17), a+1, a+1, a+1, a+1)
-    dif           = padding (MakeDiff (src,clean), a+1, a+1, a+1, a+1)
-    difcln        = NLMeans (dif, d=0, a=windmin, s=1, h=h1, rclip=ref)
-    difcln        = gauss (Median (difcln), p=16)
-    dif           = Crop (Expr ([dif, difcln], "x 0.5 - y 0.5 - * 0 < 0.5 x 0.5 - abs y 0.5 - abs < x y ? ?"), a+1, a+1, a+1, a+1)
-    mrg           = MergeDiff (clean, dif)
-    rep           = Repair (mrg, src, mode=17)
-    dif           = padding (MakeDiff (src, rep), a+1, a+1, a+1, a+1)
-    difcln        = NLMeans (dif, d=0, a=windmin, s=1, h=h1, rclip=padding (rep, a+1, a+1, a+1, a+1))
-    difcln        = Crop (difcln, a+1, a+1, a+1, a+1)
-    cln           = MergeDiff (rep, difcln)
-    pad           = padding (src, a+1, a+1, a+1, a+1) if nrlevel == 1 else padding (cln, a+1, a+1, a+1, a+1)
-    init          = pad if nrlevel == 2 else padding (cln, a+1, a+1, a+1, a+1)
-    init          = NLMeans (init, d=0, a=windmin, s=1, h=h2) if nrlevel == 2 else NLMeans (init, d=0, a=windmin, s=1, h=hfine)
-    def inline (flt, n):
-        str       = n * h2 / den + hfine * (1 - n / den)
-        window    = a // pow (2, den - n)
-        flt       = init if n == den else flt
-        dif       = MakeDiff (pad, flt)
+       h          = 7.2 if h is None else h
+    hfine         = pow (1.1988568728336214663622280225868, h)
+    hcoarse       = pow (1.4249686205122096184557327136583, h)
+    pad           = padding (src, 33, 33, 33, 33)
+    def inline_MC ():
+        supsrh    = MSuper (src, pelclip=pelclip, rfilter=4, pel=pel, **msuper_args)
+        suprdr    = MSuper (src, pelclip=pelclip, rfilter=2, pel=pel, **msuper_args)
+        vmulti    = MAnalyze (supsrh, overlap=2, blksize=4, divide=0, tr=tr, dct=5, **manalyze_args)
+        return MDegrainN (src, suprdr, vmulti, tr=tr, thsad=thsad, thscd1=thscd1, thscd2=thscd2, **mdegrain_args)
+    temporal      = padding (inline_MC (), 33, 33, 33, 33)
+    def inline_NLM (flt, init, src, hcoarse, hfine, n):
+        str       = n * hcoarse / 3 + hfine * (1 - n / 3)
+        window    = pow (2, n + 2)
+        flt       = init if n == 3 else flt
+        dif       = MakeDiff (src, flt)
         dif       = NLMeans (dif, d=0, a=window, s=1, h=str, rclip=flt)
         fnl       = MergeDiff (flt, dif)
         n         = n - 1
-        return fnl if n == -1 else inline (fnl, n)
-    Final         = inline (None, den)
-    clip          = Crop (Final, a+1, a+1, a+1, a+1)
+        return fnl if n == -1 else inline_NLM (fnl, init, src, hcoarse, hfine, n)
+    spatial       = inline_NLM (None, temporal, pad, hcoarse, h, 3) if nrlevel == 1 else temporal
+    pad           = pad if nrlevel == 1 else spatial
+    init          = pad if nrlevel == 2 else spatial
+    init          = NLMeans (init, d=0, a=4, s=1, h=h) if nrlevel == 2 else NLMeans (init, d=0, a=4, s=1, h=hfine)
+    Final         = inline_NLM (None, init, pad, h, hfine, 3)
+    clip          = Crop (Final, 33, 33, 33, 33)
     return clip
 
-def generalnr (src, srclow=None, a=32, h=1.2, sigma=8.0, block_size=8, block_step=1, group_size=32, bm_range=24, bm_step=1, lowpass=8):
+def generalnr (src, srclow=None, a=32, h=2.4, sigma=8.0, block_size=8, block_step=1, group_size=32, bm_range=24, bm_step=1, lowpass=8):
     core          = vs.get_core ()
     NLMeans       = core.knlm.KNLMeansCL
     BM3DBasic     = core.bm3d.Basic
@@ -198,9 +182,8 @@ def generalnr (src, srclow=None, a=32, h=1.2, sigma=8.0, block_size=8, block_ste
     clip          = hipass (lowf, hif, p=lowpass)
     return clip
 
-def nrfinal (spatial, dif, vmulti, peldif=None, pel=4, tr=6, thsad=10000, thscd1=10000, thscd2=255, repmode=13):
+def nrfinal (spatial, dif, vmulti, peldif=None, pel=4, tr=6, thsad=10000, thscd1=10000, thscd2=255):
     core          = vs.get_core ()
-    Repair        = core.rgsf.Repair
     Expr          = core.std.Expr
     MergeDiff     = core.std.MergeDiff
     MSuper        = core.mvsf.Super
@@ -208,13 +191,11 @@ def nrfinal (spatial, dif, vmulti, peldif=None, pel=4, tr=6, thsad=10000, thscd1
     superclip     = MSuper (dif, pelclip=peldif, rfilter=2, pel=pel, **msuper_args)
     blankd        = Expr ([dif], "0.5")
     mc            = MDegrainN (blankd, superclip, vmulti, tr=tr, thsad=thsad, thscd1=thscd1, thscd2=thscd2, **mdegrain_args)
-    nr            = MergeDiff (spatial, mc)
-    repclip       = MergeDiff (spatial, dif)
-    clip          = Repair (nr, repclip, repmode)
+    clip          = MergeDiff (spatial, mc)
     return clip
 
 ### Sharpeners ###
-def delicatesharp (src, relaxed=False):
+def delicatesharp (src, relaxed=False, coarse=False):
     core          = vs.get_core ()
     Median        = core.flt.Median
     Repair        = core.rgsf.Repair
@@ -234,7 +215,8 @@ def delicatesharp (src, relaxed=False):
     dif           = inline (dif)
     difrg         = RemoveGrain (dif, 11)
     fdif          = Expr ([dif, difrg], ["y 0.5 - abs x 0.5 - abs > y 0.5 ?"])
-    clip          = MergeDiff (src, fdif)
+    merge         = MergeDiff (src, fdif)
+    clip          = merge if coarse or relaxed else hipass (src, merge, p=16)
     return clip
 
 def regularsharp (src, median=False):
@@ -253,22 +235,23 @@ def regularsharp (src, median=False):
         clp       = MergeDiff (clp, dif)
         n         = n-1
         return clp if n == 0 else inline (clp, n)
-    u2x           = genpelclip (src, pel=2)
-    ublur         = inline (u2x, 4)
-    cdif          = resample (MakeDiff (u2x, ublur), w, h, -0.25, -0.25, kernel="cubic", a1=-4, a2=-2, **fmtc_args)
-    csharp        = hipass (src, MergeDiff (src, cdif), p=16)
+    u2x           = 0 if median else genpelclip (src, pel=2)
+    ublur         = 0 if median else inline (u2x, 4)
+    cdif          = 0 if median else resample (MakeDiff (u2x, ublur), w, h, -0.25, -0.25, kernel="cubic", a1=-4, a2=-2, **fmtc_args)
+    csharp        = 0 if median else halonr (hipass (src, MergeDiff (src, cdif), 16), 32, 12.8, 0.00390625, None, 8)
     msharp        = MergeDiff (src, MakeDiff (src, Median (src))) if median else 0
-    clip          = min_dif (csharp, msharp, src) if median else csharp
+    clip          = msharp if median else csharp
     return clip
 
-def deconvolution (src):
+def deconvolution (src, loop=2):
     core          = vs.get_core ()
     Deconv        = core.vcfreq.Sharp
-    dcv           = Deconv (Deconv (src, **deconv_args), **deconv_args)
+    dcv           = Deconv (src, **deconv_args)
     clip          = hipass (src, dcv, p=8)
-    return clip
+    loop          = loop - 1
+    return halonr (clip, 32, 12.8, 0.00390625, None, 8) if loop == 0 else deconvolution (clip, loop)
 
-def sharpfinal (soft, dif, limit, vmulti, peldif=None, pellimit=None, pel=4, tr=6, thsadA=10000, thsadL=400, thscd1=10000, thscd2=255, a=32, h=6.4, thr=0.00390625, elast=None, repmode=13, str=1.00):
+def sharpfinal (soft, dif, limit, vmulti, peldif=None, pellimit=None, pel=4, tr=6, thsadA=10000, thsadL=400, thscd1=10000, thscd2=255, str=1.00):
     core          = vs.get_core ()
     Repair        = core.rgsf.Repair
     Maximum       = core.flt.Maximum
@@ -284,31 +267,27 @@ def sharpfinal (soft, dif, limit, vmulti, peldif=None, pellimit=None, pel=4, tr=
     superdif      = MSuper (dif, pelclip=peldif, rfilter=2, pel=pel, **msuper_args)
     supercmp      = MSuper (limit, pelclip=pellimit, rfilter=2, pel=pel, **msuper_args)
     MDG           = MDegrainN (blankd, superdif, vmulti, tr=tr, thsad=thsadA, thscd1=thscd1, thscd2=thscd2, **mdegrain_args)
-    TA            = Repair (MergeDiff (soft, MDG), MergeDiff (soft, dif), mode=repmode)
+    averaged      = MergeDiff (soft, MDG)
     comp          = MCompensate (soft, supercmp, vmulti, tr=tr, thsad=thsadL, thscd1=thscd1, thscd2=thscd2)
-    max           = maxmulti (comp, tr=tr)
-    min           = minmulti (comp, tr=tr)
-    TL            = clamp (TA, max, min, overshoot=0.0, undershoot=0.0)
-    local         = Expr ([soft, TL], expression)
-    bright        = Maximum (limit)
-    dark          = Minimum (limit)
-    SL            = clamp (local, bright, dark, overshoot=0.0, undershoot=0.0)
-    SRPD          = halonr (MakeDiff (SL, soft), rclip=SL, a=a, h=h, thr=thr, elast=elast)
-    clip          = MergeDiff (soft, SRPD)
+    bright        = Expr ([maxmulti (comp, tr=tr), Maximum (limit)], "x y min")
+    dark          = Expr ([minmulti (comp, tr=tr), Minimum (limit)], "x y max")
+    clamped       = clamp (averaged, bright, dark, overshoot=0.0, undershoot=0.0)
+    amplified     = Expr ([soft, clamped], expression)
+    clip          = hipass (soft, Repair (amplified, halonr (amplified, 32, 6.4, 0.00390625, None, 8), 16), 8)
     return clip
 
 ### Motion Estimation ###
-def getvectors (src, pelclip=None, tr=6, pel=4, dct=5, thsad=400):
+def getvectors (src, pelclip=None, tr=6, pel=4, thsad=400):
     core          = vs.get_core ()
     MSuper        = core.mvsf.Super
     MAnalyze      = mvmulti.Analyze
     MRecalculate  = mvmulti.Recalculate
     supersoft     = MSuper (src, pelclip=pelclip, rfilter=4, pel=pel, **msuper_args)
     supersharp    = MSuper (src, pelclip=pelclip, rfilter=2, pel=pel, **msuper_args)
-    vmulti        = MAnalyze (supersoft, overlap=16, blksize=32, divide=2, tr=tr, dct=dct, **manalyze_args)
-    vmulti        = MRecalculate (supersoft, vmulti, overlap=8, blksize=16, divide=2, tr=tr, thsad=thsad/2, dct=dct, **mrecalculate_args)
-    vmulti        = MRecalculate (supersharp, vmulti, overlap=4, blksize=8, divide=2, tr=tr, thsad=thsad/2, dct=dct, **mrecalculate_args)
-    vmulti        = MRecalculate (supersharp, vmulti, overlap=2, blksize=4, divide=0, tr=tr, thsad=thsad/2, dct=dct, **mrecalculate_args)
+    vmulti        = MAnalyze (supersoft, overlap=16, blksize=32, divide=2, tr=tr, dct=7, **manalyze_args)
+    vmulti        = MRecalculate (supersoft, vmulti, overlap=8, blksize=16, divide=2, tr=tr, thsad=thsad/2, dct=8, **mrecalculate_args)
+    vmulti        = MRecalculate (supersharp, vmulti, overlap=4, blksize=8, divide=2, tr=tr, thsad=thsad/2, dct=6, **mrecalculate_args)
+    vmulti        = MRecalculate (supersharp, vmulti, overlap=2, blksize=4, divide=0, tr=tr, thsad=thsad/2, dct=5, **mrecalculate_args)
     return vmulti
 
 def genpelclip (src, src2=None, pel=4):
@@ -322,59 +301,6 @@ def genpelclip (src, src2=None, pel=4):
     u4x2          = 0 if src2 is None else Transpose (NNEDI (Transpose (NNEDI (u2x2, **nnedi_args)), **nnedi_args))
     dif           = 0 if src2 is None else (MakeDiff (u2x, u2x2) if pel == 2 else MakeDiff (u4x, u4x2))
     clip          = (u2x if pel == 2 else u4x) if src2 is None else dif
-    return clip
-
-### Resizing ###
-def resizenr (src, w=None, h=None, sx=0, sy=0, sw=0, sh=0, kernel="spline", taps=4, a1=None, a2=None, a3=None, center=True):
-    core          = vs.get_core ()
-    resample      = core.fmtc.resample
-    Repair        = core.rgsf.Repair
-    BlankClip     = core.std.BlankClip
-    MaskedMerge   = core.std.MaskedMerge
-    w             = src.width if w is None else w
-    h             = src.height if h is None else h
-    sr_h          = w / src.width
-    sr_v          = h / src.height
-    sr_up         = max (sr_h, sr_v)
-    sr_dw         = 1.0 / min (sr_h, sr_v)
-    sr            = max (sr_up, sr_dw)
-    nrb           = (sr > 2.5)
-    nrf           = (sr < 2.5 + 1.0)
-    nrr           = min (sr - 2.5, 1.0) if nrb else 1.0
-    nrv           = (1.0 - nrr) if nrb else 0.0
-    nrm           = BlankClip (clip=src, width=w, height=h, color=nrv) if nrb and nrf else 0
-    main          = resample (src, w=w, h=h, sx=sx, sy=sy, sw=sw, sh=sh, kernel=kernel, taps=taps, a1=a1, a2=a2, a3=a3, center=center, **fmtc_args)
-    nrng          = resample (src, w=w, h=h, sx=sx, sy=sy, sw=sw, sh=sh, kernel="gauss", a1=100, center=center, **fmtc_args) if nrf else main
-    clip          = Repair (main, nrng, 1) if nrf else main
-    clip          = MaskedMerge (main, clip, nrm) if nrf and nrb else clip
-    return clip
-
-### Chroma Reconstruction ###
-def fulltonative (src, a=32, h=6.4):
-    core          = vs.get_core ()
-    NLMeans       = core.knlm.KNLMeansCL
-    Expr          = core.std.Expr
-    MakeDiff      = core.std.MakeDiff
-    MergeDiff     = core.std.MergeDiff
-    ShufflePlanes = core.std.ShufflePlanes
-    Crop          = core.std.CropRel
-    pad           = padding (src, a, a, a, a)
-    srcy          = ShufflePlanes (pad, 0, vs.GRAY)
-    srcu          = ShufflePlanes (pad, 1, vs.GRAY)
-    srcv          = ShufflePlanes (pad, 2, vs.GRAY)
-    ref           = NLMeans (srcy, d=0, a=a, s=0, h=math.pow (1.464968620512209618455732713658, h))
-    u4x           = genpelclip (ShufflePlanes ([ref, srcu, srcv], [0, 0, 0], vs.YUV), pel=4)
-    luma          = ShufflePlanes (u4x, 0, vs.GRAY)
-    u             = Expr (ShufflePlanes (u4x, 1, vs.GRAY), "x 0.5 +")
-    v             = Expr (ShufflePlanes (u4x, 2, vs.GRAY), "x 0.5 +")
-    unew          = resizenr (NLMeans (u, d=0, a=a, s=0, h=h, rclip=luma), pad.width, pad.height, sx=-1.25, sy=-1.25, kernel="spline", taps=6)
-    vnew          = resizenr (NLMeans (v, d=0, a=a, s=0, h=h, rclip=luma), pad.width, pad.height, sx=-1.25, sy=-1.25, kernel="spline", taps=6)
-    uhi           = MakeDiff (unew, gauss (gauss (unew, p=8), p=12))
-    vhi           = MakeDiff (vnew, gauss (gauss (vnew, p=8), p=12))
-    ufinal        = Expr (MergeDiff (Expr (srcu, "x 0.5 +"), uhi), "x 0.5 -")
-    vfinal        = Expr (MergeDiff (Expr (srcv, "x 0.5 +"), vhi), "x 0.5 -")
-    merge         = ShufflePlanes ([srcy, ufinal, vfinal], [0, 0, 0], vs.YUV)
-    clip          = Crop (merge, a, a, a, a)
     return clip
 
 ### Sigmoidal ###
