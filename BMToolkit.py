@@ -302,6 +302,31 @@ def genpelclip (src, src2=None, pel=4):
     dif           = 0 if src2 is None else (MakeDiff (u2x, u2x2) if pel == 2 else MakeDiff (u4x, u4x2))
     clip          = (u2x if pel == 2 else u4x) if src2 is None else dif
     return clip
+    
+### Resizing ###
+def resizenr (src, w=None, h=None, sx=0, sy=0, sw=0, sh=0, kernel="spline", taps=4, a1=None, a2=None, a3=None, center=True):
+    core          = vs.get_core ()
+    resample      = core.fmtc.resample
+    Repair        = core.rgsf.Repair
+    BlankClip     = core.std.BlankClip
+    MaskedMerge   = core.std.MaskedMerge
+    w             = src.width if w is None else w
+    h             = src.height if h is None else h
+    sr_h          = w / src.width
+    sr_v          = h / src.height
+    sr_up         = max (sr_h, sr_v)
+    sr_dw         = 1.0 / min (sr_h, sr_v)
+    sr            = max (sr_up, sr_dw)
+    nrb           = (sr > 2.5)
+    nrf           = (sr < 2.5 + 1.0)
+    nrr           = min (sr - 2.5, 1.0) if nrb else 1.0
+    nrv           = (1.0 - nrr) if nrb else 0.0
+    nrm           = BlankClip (clip=src, width=w, height=h, color=nrv) if nrb and nrf else 0
+    main          = resample (src, w=w, h=h, sx=sx, sy=sy, sw=sw, sh=sh, kernel=kernel, taps=taps, a1=a1, a2=a2, a3=a3, center=center, **fmtc_args)
+    nrng          = resample (src, w=w, h=h, sx=sx, sy=sy, sw=sw, sh=sh, kernel="gauss", a1=100, center=center, **fmtc_args) if nrf else main
+    clip          = Repair (main, nrng, 1) if nrf else main
+    clip          = MaskedMerge (main, clip, nrm) if nrf and nrb else clip
+    return clip
 
 ### Sigmoidal ###
 def build_sigmoid_expr (string, inv=False, thr=0.5, cont=6.5):
