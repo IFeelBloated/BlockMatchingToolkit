@@ -262,7 +262,7 @@ def regularsharp (src, median=False, lowpass=16, a=32, h=12.8, thr=0.00390625, e
         return clp if n == 0 else inline (clp, n)
     u2x             = 0 if median else genpelclip (src, pel=2)
     ublur           = 0 if median else inline (u2x, 4)
-    cdif            = 0 if median else resample (MakeDiff (u2x, ublur), width, height, -0.25, -0.25, kernel="cubic", a1=-4, a2=-2, **fmtc_args)
+    cdif            = 0 if median else resample (MakeDiff (u2x, ublur), width, height, -0.5, -0.5, kernel="cubic", a1=-4, a2=-2, **fmtc_args)
     csharp          = 0 if median else halonr (hipass (src, MergeDiff (src, cdif), lowpass), a, h, thr, elast, lowpass//2)
     msharp          = MergeDiff (src, MakeDiff (src, Median (src))) if median else 0
     clip            = msharp if median else csharp
@@ -354,6 +354,42 @@ def resizenr (src, w=None, h=None, sx=0, sy=0, sw=0, sh=0, kernel="spline", taps
     return clip
 
 ### Chroma Reconstruction ###
+def subtofull (src, cplace="mpeg2"):
+    core            = vs.get_core ()
+    resample        = core.fmtc.resample
+    Expr            = core.std.Expr
+    ShufflePlanes   = core.std.ShufflePlanes
+    factor_w        = src.format.subsampling_w
+    factor_h        = src.format.subsampling_h
+    def inline_pel_422 (src):
+        NNEDI       = core.nnedi3.nnedi3
+        Transpose   = core.std.Transpose
+        clip        = Transpose (NNEDI (Transpose (src), **nnedi_args))
+        return clip
+    srcy            = ShufflePlanes (src, 0, vs.GRAY)
+    srcu            = Expr (ShufflePlanes (src, 1, vs.GRAY), "x 0.5 +")
+    srcv            = Expr (ShufflePlanes (src, 2, vs.GRAY), "x 0.5 +")
+    if factor_w == 1 and factor_h == 1:
+       unew         = genpelclip (srcu, pel=2)
+       vnew         = genpelclip (srcv, pel=2)
+       if cplace == "mpeg2":
+          ushift    = resample (unew, sx=0, sy=-0.5, kernel="spline", taps=6, **fmtc_args)
+          vshift    = resample (vnew, sx=0, sy=-0.5, kernel="spline", taps=6, **fmtc_args)
+       elif cplace == "mpeg1":
+          ushift    = resample (unew, sx=-0.5, sy=-0.5, kernel="spline", taps=6, **fmtc_args)
+          vshift    = resample (vnew, sx=-0.5, sy=-0.5, kernel="spline", taps=6, **fmtc_args)
+       else:
+          raise ValueError ("wtf?")
+    if factor_w == 1 and factor_h == 0:
+       unew         = inline_pel_422 (srcu)
+       vnew         = inline_pel_422 (srcv)
+       ushift       = resample (unew, sx=1, sy=0, kernel="spline", taps=6, **fmtc_args)
+       vshift       = resample (vnew, sx=1, sy=0, kernel="spline", taps=6, **fmtc_args)
+    ufinal          = Expr (ushift, "x 0.5 -")
+    vfinal          = Expr (vshift, "x 0.5 -")
+    clip            = ShufflePlanes ([srcy, ufinal, vfinal], [0, 0, 0], vs.YUV)
+    return clip
+
 def fulltonative (src, a=32, h=6.4, lowpass=6, mode=0):
     core            = vs.get_core ()
     NLMeans         = core.knlm.KNLMeansCL
@@ -375,8 +411,8 @@ def fulltonative (src, a=32, h=6.4, lowpass=6, mode=0):
     luma            = ShufflePlanes (u4x, 0, vs.GRAY)
     u               = Expr (ShufflePlanes (u4x, 1, vs.GRAY), "x 0.5 +")
     v               = Expr (ShufflePlanes (u4x, 2, vs.GRAY), "x 0.5 +")
-    unew            = resizenr (NLMeans (u, d=0, a=a, s=0, h=h, rclip=luma), pad.width, pad.height, sx=-1.25, sy=-1.25, kernel="spline", taps=6)
-    vnew            = resizenr (NLMeans (v, d=0, a=a, s=0, h=h, rclip=luma), pad.width, pad.height, sx=-1.25, sy=-1.25, kernel="spline", taps=6)
+    unew            = resizenr (NLMeans (u, d=0, a=a, s=0, h=h, rclip=luma), pad.width, pad.height, sx=-1.5, sy=-1.5, kernel="spline", taps=6)
+    vnew            = resizenr (NLMeans (v, d=0, a=a, s=0, h=h, rclip=luma), pad.width, pad.height, sx=-1.5, sy=-1.5, kernel="spline", taps=6)
     uhi             = MakeDiff (unew, gauss_h (unew, p=lowpass)) if mode else MakeDiff (unew, gauss (unew, p=lowpass))
     vhi             = MakeDiff (vnew, gauss_h (vnew, p=lowpass)) if mode else MakeDiff (vnew, gauss (vnew, p=lowpass))
     ufinal          = Expr (MergeDiff (Expr (srcu, "x 0.5 +"), uhi), "x 0.5 -")
