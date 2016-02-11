@@ -185,7 +185,7 @@ def crapnr (src, pelclip=None, nrlevel=1, deblock=True, h=6.4, thr=0.03125, elas
     BM_inter        = inline_BM_inter ()
     BM_inter_fine   = Crop (inline_NLM (None, padding (BM_inter, 33, 33, 33, 33), pad, 4), 33, 33, 33, 33) if nrlevel == 1 else 0
     BM_inter_raw    = thr_merge (BM_inter_fine, hipass (BM_inter_fine, BM_inter, 8), thr=thr, elast=elast) if nrlevel == 1 and deblock else 0
-    BM_inter        = MaskedMerge (BM_inter_fine, BM_inter_raw, genblockmask (src)) if nrlevel == 1 and deblock else BM_inter_fine if nrlevel == 1 and !deblock else BM_inter
+    BM_inter        = MaskedMerge (BM_inter_fine, BM_inter_raw, genblockmask (src)) if nrlevel == 1 and deblock else BM_inter_fine if nrlevel == 1 else BM_inter
     BM_inter        = padding (BM_inter, 33, 33, 33, 33)
     BM_intra        = inline_BM_intra (BM_inter, hfine) if nrlevel == 1 else inline_BM_intra (BM_inter, h)
     BM_intra        = inline_NLM (None, BM_intra, BM_inter, 4)
