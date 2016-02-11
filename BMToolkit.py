@@ -150,7 +150,7 @@ def halonr (src, a=32, h=6.4, thr=0.00390625, elast=None, lowpass=8):
     clip            = Crop (Final, a, a, a, a)
     return clip
 
-def crapnr (src, pelclip=None, nrlevel=1, h=6.4, thr=0.03125, elast=0.015625, tr=6, pel=4, thsad=2000, thscd1=10000, thscd2=255, sigma=8.0, block_size=8, block_step=1, group_size=32, bm_range=24, bm_step=1):
+def crapnr (src, pelclip=None, nrlevel=1, deblock=True, h=6.4, thr=0.03125, elast=0.015625, tr=6, pel=4, thsad=2000, thscd1=10000, thscd2=255, sigma=8.0, block_size=8, block_step=1, group_size=32, bm_range=24, bm_step=1):
     core            = vs.get_core ()
     NLMeans         = core.knlm.KNLMeansCL
     BM3DBasic       = core.bm3d.Basic
@@ -184,8 +184,8 @@ def crapnr (src, pelclip=None, nrlevel=1, h=6.4, thr=0.03125, elast=0.015625, tr
     pad             = padding (src, 33, 33, 33, 33)
     BM_inter        = inline_BM_inter ()
     BM_inter_fine   = Crop (inline_NLM (None, padding (BM_inter, 33, 33, 33, 33), pad, 4), 33, 33, 33, 33) if nrlevel == 1 else 0
-    BM_inter_raw    = thr_merge (BM_inter_fine, hipass (BM_inter_fine, BM_inter, 8), thr=thr, elast=elast) if nrlevel == 1 else 0
-    BM_inter        = MaskedMerge (BM_inter_fine, BM_inter_raw, genblockmask (src)) if nrlevel == 1 else BM_inter
+    BM_inter_raw    = thr_merge (BM_inter_fine, hipass (BM_inter_fine, BM_inter, 8), thr=thr, elast=elast) if nrlevel == 1 and deblock else 0
+    BM_inter        = MaskedMerge (BM_inter_fine, BM_inter_raw, genblockmask (src)) if nrlevel == 1 and deblock else BM_inter_fine if nrlevel == 1 and !deblock else BM_inter
     BM_inter        = padding (BM_inter, 33, 33, 33, 33)
     BM_intra        = inline_BM_intra (BM_inter, hfine) if nrlevel == 1 else inline_BM_intra (BM_inter, h)
     BM_intra        = inline_NLM (None, BM_intra, BM_inter, 4)
