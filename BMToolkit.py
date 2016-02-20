@@ -219,7 +219,8 @@ def nrfinal (spatial, dif, vmulti, peldif=None, pel=4, tr=6, thsad=10000, thscd1
     superclip       = MSuper (dif, pelclip=peldif, rfilter=2, pel=pel, **msuper_args)
     blankd          = Expr ([dif], "0.5")
     mc              = MDegrainN (blankd, superclip, vmulti, tr=tr, thsad=thsad, thscd1=thscd1, thscd2=thscd2, **mdegrain_args)
-    clip            = MergeDiff (spatial, mc)
+    newdif          = min_dif (dif, mc, blankd)
+    clip            = MergeDiff (spatial, newdif)
     return clip
 
 ### Sharpeners ###
