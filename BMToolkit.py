@@ -141,7 +141,7 @@ def halonr (src, a=32, h=6.4, thr=0.00390625, elast=None, lowpass=8):
     MaskedMerge     = core.std.MaskedMerge
     elast           = thr / 6 if elast is None else elast
     pad             = padding (src, a, a, a, a)
-    Clean           = hipass (pad, NLMeans (pad, d=0, a=a, s=0, h=h, rclip=pad), p=lowpass)
+    Clean           = hipass (pad, NLMeans (pad, d=0, a=a, s=0, h=h, wref=1.0, rclip=pad), p=lowpass)
     EMask           = Canny (Clean, **canny_args)
     EMask           = Expr (EMask, "x 0.24 - 128.0 * 0.0 max 1.0 min")
     EMask           = Expand (Inflate (Expand (EMask)))
@@ -171,13 +171,16 @@ def crapnr (src, pelclip=None, nrlevel=1, deblock=True, h=6.4, thr=0.03125, elas
     def inline_BM_intra (src, h):
         ref         = BM3DBasic (src, sigma=sigma, block_size=block_size, block_step=block_step, group_size=group_size, bm_range=bm_range, bm_step=bm_step) 
         bm3d        = BM3DFinal (src, ref, sigma=sigma, block_size=block_size, block_step=block_step, group_size=group_size, bm_range=bm_range, bm_step=bm_step)
-        return NLMeans (bm3d, d=0, a=block_size//2, s=1, h=h)
+        return NLMeans (bm3d, d=0, a=block_size//2, s=1, h=h, wref=1.0)
     def inline_NLM (flt, init, src, n):
+        c1          = 1.0707892518365290738330599429051
+        c2          = 0.4798695862246764421520306169363
         str         = n * h / 4 + hfine * (1 - n / 4)
+        weight      = pow (c1, str * (4 - n)) - c2
         window      = 32 // pow (2, n)
         flt         = init if n == 4 else flt
         dif         = MakeDiff (src, flt)
-        dif         = NLMeans (dif, d=0, a=window, s=1, h=str, rclip=flt)
+        dif         = NLMeans (dif, d=0, a=window, s=1, h=str, wref=weight, rclip=flt)
         fnl         = MergeDiff (flt, dif)
         n           = n - 1
         return fnl if n == -1 else inline_NLM (fnl, init, src, n)
@@ -200,7 +203,7 @@ def generalnr (src, srclow=None, a=32, h=2.4, sigma=8.0, block_size=8, block_ste
     Crop            = core.std.CropRel
     srclow          = src if srclow is None else srclow
     pad             = padding (src, a+4, a+4, a+4, a+4)
-    hflt            = NLMeans (pad, d=0, a=a, s=4, h=h)
+    hflt            = NLMeans (pad, d=0, a=a, s=4, h=h, wref=1.0)
     hif             = Crop (hflt, a+4, a+4, a+4, a+4)
     ref             = BM3DBasic (srclow, sigma=sigma, block_size=block_size, block_step=block_step, group_size=group_size, bm_range=bm_range, bm_step=bm_step)
     lowf            = BM3DFinal (srclow, ref, sigma=sigma, block_size=block_size, block_step=block_step, group_size=group_size, bm_range=bm_range, bm_step=bm_step)
@@ -296,7 +299,7 @@ def sharpfinal (soft, dif, limit, vmulti, peldif=None, pellimit=None, pel=4, tr=
     supercmp        = MSuper (limit, pelclip=pellimit, rfilter=2, pel=pel, **msuper_args)
     MDG             = MDegrainN (blankd, superdif, vmulti, tr=tr, thsad=thsadA, thscd1=thscd1, thscd2=thscd2, **mdegrain_args)
     newdif          = min_dif (MDG, dif, blankd)
-    newdif          = NLMeans (padding (newdif, a+4, a+4, a+4, a+4), d=0, a=a, s=4, h=hintra, rclip=padding (MergeDiff (soft, newdif), a+4, a+4, a+4, a+4))
+    newdif          = NLMeans (padding (newdif, a+4, a+4, a+4, a+4), d=0, a=a, s=4, h=hintra, wref=1.0, rclip=padding (MergeDiff (soft, newdif), a+4, a+4, a+4, a+4))
     averaged        = MergeDiff (soft, Crop (newdif, a+4, a+4, a+4, a+4))
     comp            = MCompensate (soft, supercmp, vmulti, tr=tr, thsad=thsadL, thscd1=thscd1, thscd2=thscd2)
     bright          = Expr ([maxmulti (comp, tr=tr), Maximum (limit)], "x y min")
@@ -416,8 +419,8 @@ def fulltonative (src, a=32, h=6.4, lowpass=6, mode=0):
     luma            = ShufflePlanes (u4x, 0, vs.GRAY)
     u               = Expr (ShufflePlanes (u4x, 1, vs.GRAY), "x 0.5 +")
     v               = Expr (ShufflePlanes (u4x, 2, vs.GRAY), "x 0.5 +")
-    unew            = resizenr (NLMeans (u, d=0, a=a, s=0, h=h, rclip=luma), pad.width, pad.height, sx=-1.5, sy=-1.5, kernel="spline", taps=6)
-    vnew            = resizenr (NLMeans (v, d=0, a=a, s=0, h=h, rclip=luma), pad.width, pad.height, sx=-1.5, sy=-1.5, kernel="spline", taps=6)
+    unew            = resizenr (NLMeans (u, d=0, a=a, s=0, h=h, wref=1.0, rclip=luma), pad.width, pad.height, sx=-1.5, sy=-1.5, kernel="spline", taps=6)
+    vnew            = resizenr (NLMeans (v, d=0, a=a, s=0, h=h, wref=1.0, rclip=luma), pad.width, pad.height, sx=-1.5, sy=-1.5, kernel="spline", taps=6)
     uhi             = MakeDiff (unew, gauss_h (unew, p=lowpass)) if mode else MakeDiff (unew, gauss (unew, p=lowpass))
     vhi             = MakeDiff (vnew, gauss_h (vnew, p=lowpass)) if mode else MakeDiff (vnew, gauss (vnew, p=lowpass))
     ufinal          = Expr (MergeDiff (Expr (srcu, "x 0.5 +"), uhi), "x 0.5 -")
