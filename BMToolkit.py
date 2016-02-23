@@ -283,18 +283,15 @@ def deconvolution (src, loop=2, lowpass=8, a=32, h=12.8, thr=0.00390625, elast=N
 
 def sharpfinal (soft, dif, limit, vmulti, peldif=None, pellimit=None, pel=4, tr=6, thsad=400, thscd1=10000, thscd2=255, str=1.00, lowpass=8, a=32, h=6.4, thr=0.00390625, elast=None):
     core            = vs.get_core ()
-    NLMeans         = core.knlm.KNLMeansCL
     Repair          = core.rgsf.Repair
     Maximum         = core.flt.Maximum
     Minimum         = core.flt.Minimum
     Expr            = core.std.Expr
     MakeDiff        = core.std.MakeDiff
     MergeDiff       = core.std.MergeDiff
-    Crop            = core.std.CropRel
     MSuper          = core.mvsf.Super
     MDegrainN       = mvmulti.DegrainN
     MCompensate     = mvmulti.Compensate
-    hintra          = pow (1.2153830693575750222940769140908, str)
     expression      = ["{x} {y} {x} - abs 4 / 1 4 / pow 4 * 1.6 * {str} * {y} {x} - {y} {x} - abs 1.001 + / * + 256 /".format (str=str, x="x 256 *", y="y 256 *")]
     blankd          = Expr ([dif], ["0.5"])
     superdif        = MSuper (dif, pelclip=peldif, rfilter=2, pel=pel, **msuper_args)
@@ -302,8 +299,7 @@ def sharpfinal (soft, dif, limit, vmulti, peldif=None, pellimit=None, pel=4, tr=
     coarse          = MDegrainN (blankd, superdif, vmulti, tr=tr, thsad=10000, thscd1=thscd1, thscd2=thscd2, **mdegrain_args)
     fine            = MDegrainN (blankd, superdif, vmulti, tr=tr, thsad=thsad, thscd1=thscd1, thscd2=thscd2, **mdegrain_args)
     newdif          = Expr ([dif, coarse, blankd, fine], ["y z - abs x z - abs > a y ?"])
-    newdif          = NLMeans (padding (newdif, a+4, a+4, a+4, a+4), d=0, a=a, s=4, h=hintra, wref=1.0, rclip=padding (MergeDiff (soft, newdif), a+4, a+4, a+4, a+4))
-    averaged        = MergeDiff (soft, Crop (newdif, a+4, a+4, a+4, a+4))
+    averaged        = MergeDiff (soft, newdif)
     comp            = MCompensate (soft, supercmp, vmulti, tr=tr, thsad=thsad, thscd1=thscd1, thscd2=thscd2)
     bright          = Expr ([maxmulti (comp, tr=tr), Maximum (limit)], "x y min")
     dark            = Expr ([minmulti (comp, tr=tr), Minimum (limit)], "x y max")
