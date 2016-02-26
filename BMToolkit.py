@@ -155,9 +155,11 @@ def crapnr (src, pelclip=None, nrlevel=1, deblock=True, h=6.4, thr=0.03125, elas
     NLMeans         = core.knlm.KNLMeansCL
     BM3DBasic       = core.bm3d.Basic
     BM3DFinal       = core.bm3d.Final
+    AI              = core.w2xc.Waifu2x
     MakeDiff        = core.std.MakeDiff
     MergeDiff       = core.std.MergeDiff
     MaskedMerge     = core.std.MaskedMerge
+    ShufflePlanes   = core.std.ShufflePlanes
     Crop            = core.std.CropRel
     MSuper          = core.mvsf.Super
     MAnalyze        = mvmulti.Analyze
@@ -168,10 +170,12 @@ def crapnr (src, pelclip=None, nrlevel=1, deblock=True, h=6.4, thr=0.03125, elas
         suprdr      = MSuper (src, pelclip=pelclip, rfilter=2, pel=pel, **msuper_args)
         vmulti      = MAnalyze (supsrh, overlap=2, blksize=4, divide=0, tr=tr, dct=5, **manalyze_args)
         return MDegrainN (src, suprdr, vmulti, tr=tr, thsad=thsad, thscd1=thscd1, thscd2=thscd2, **mdegrain_args)
-    def inline_BM_intra (src, h):
+    def inline_BM_intra (src):
         ref         = BM3DBasic (src, sigma=sigma, block_size=block_size, block_step=block_step, group_size=group_size, bm_range=bm_range, bm_step=bm_step) 
         bm3d        = BM3DFinal (src, ref, sigma=sigma, block_size=block_size, block_step=block_step, group_size=group_size, bm_range=bm_range, bm_step=bm_step)
-        return NLMeans (bm3d, d=0, a=block_size//2, s=1, h=h, wref=1.0)
+        rgb         = ShufflePlanes ([bm3d, bm3d, bm3d], [0, 0, 0], vs.RGB)
+        ai          = AI (rgb, noise=nrlevel, scale=1, photo=True)
+        return ShufflePlanes (ai, 0, vs.GRAY)
     def inline_NLM (flt, init, src, n):
         c1          = 1.0707892518365290738330599429051
         c2          = 0.4798695862246764421520306169363
@@ -190,7 +194,7 @@ def crapnr (src, pelclip=None, nrlevel=1, deblock=True, h=6.4, thr=0.03125, elas
     BM_inter_raw    = thr_merge (BM_inter_fine, hipass (BM_inter_fine, BM_inter, 8), thr=thr, elast=elast) if nrlevel == 1 and deblock else 0
     BM_inter        = MaskedMerge (BM_inter_fine, BM_inter_raw, genblockmask (src)) if nrlevel == 1 and deblock else BM_inter_fine if nrlevel == 1 else BM_inter
     BM_inter        = padding (BM_inter, 33, 33, 33, 33)
-    BM_intra        = inline_BM_intra (BM_inter, hfine) if nrlevel == 1 else inline_BM_intra (BM_inter, h)
+    BM_intra        = inline_BM_intra (BM_inter)
     BM_intra        = inline_NLM (None, BM_intra, BM_inter, 4)
     clip            = Crop (BM_intra, 33, 33, 33, 33)
     return clip
