@@ -142,8 +142,9 @@ def halonr (src, a=32, h=6.4, thr=0.00390625, elast=None, lowpass=8):
     elast           = thr / 6 if elast is None else elast
     pad             = padding (src, a, a, a, a)
     Clean           = hipass (pad, NLMeans (pad, d=0, a=a, s=0, h=h, wref=1.0, rclip=pad), p=lowpass)
-    EMask           = Canny (Clean, **canny_args)
-    EMask           = Expr (EMask, "x 0.24 - 128.0 * 0.0 max 1.0 min")
+    Blurred         = NLMeans (Clean, d=0, a=a, s=0, h=64, wref=1.0)
+    EMask           = Canny (Blurred, **canny_args)
+    EMask           = Expr (EMask, "x 0.24 - 6.4 * 0.0 max 1.0 min")
     EMask           = Expand (Inflate (Expand (EMask)))
     MRG             = MaskedMerge (pad, Clean, EMask)
     Final           = thr_merge (pad, MRG, thr=thr, elast=elast)
